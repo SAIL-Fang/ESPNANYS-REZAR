@@ -107,6 +107,11 @@ impl Command {
             _ => 0x80,
         }
     }
+
+    /// Dongle LED is the one GET that disables the device-specific get flag.
+    pub const fn wants_zero_flag(self) -> bool {
+        matches!(self, Self::DongleLed)
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -372,7 +377,7 @@ impl<T: Transport> SailDevice<T> {
         let flags9 = match command.class() {
             // DongleLed is the one GET that always wants 0x00; other GETs
             // use the wired/wireless device policy supplied by the transport.
-            RequestClass::Get if command.flags9() == 0x00 => 0x00,
+            RequestClass::Get if command.wants_zero_flag() => 0x00,
             RequestClass::Get => self.get_flags9,
             // set1/set10 always use 0x80, including on wired 0x056E.
             RequestClass::Set1 | RequestClass::Set10 => 0x80,

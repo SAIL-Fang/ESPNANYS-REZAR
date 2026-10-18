@@ -38,6 +38,14 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             None => ThxBridge::open_passive()?,
         }
         .status()?;
+        // Do not construct the activating bridge unless we can restore both
+        // pieces of user state afterwards. The active constructor enables
+        // normalization; an unknown prior state would leave it on.
+        if observed.enabled.is_none()
+            || !matches!(observed.level, Some(level) if (1..=100).contains(&level))
+        {
+            return Err("cannot verify: normalization state is unavailable".into());
+        }
         let bridge = match &dll {
             Some(path) => ThxBridge::with_dll(path)?,
             None => ThxBridge::open()?,

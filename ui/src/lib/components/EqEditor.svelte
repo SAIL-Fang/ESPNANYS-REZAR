@@ -41,10 +41,9 @@
   }
 
   function updateDraft(index: number, raw: string) {
+    // Keep the raw string local. Applying on each keystroke made Escape
+    // unable to undo the edit and broke intermediate values like "-".
     drafts[index] = raw;
-    if (raw.trim() === "") return;
-    const value = Number(raw);
-    if (Number.isFinite(value)) oninput(index, clamp(value));
   }
 
   function commitDraft(index: number) {

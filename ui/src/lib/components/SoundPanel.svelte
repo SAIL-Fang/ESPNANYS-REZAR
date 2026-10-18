@@ -108,7 +108,7 @@
       disabled={spatialBusy}
       aria-pressed={spatial === true}
       onclick={() => chooseSpatial(true)}
-    >THX SPATIAL AUDIO 空间音效</button>
+    >THX 空间音效</button>
   </div>
 </section>
 
