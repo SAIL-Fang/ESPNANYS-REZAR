@@ -56,11 +56,15 @@
     max="100"
     step="1"
     value={level}
-    disabled={!available || busy}
+    disabled={!available || busy || !enabled}
     aria-label="声音标准化等级"
     aria-valuetext={`${level} 级，范围 1 到 100`}
-    oninput={(event) => onlevel(Number(event.currentTarget.value))}
-    onchange={onsave}
+    oninput={(event) => {
+      if (enabled) onlevel(Number(event.currentTarget.value));
+    }}
+    onchange={() => {
+      if (enabled) onsave();
+    }}
   />
   <div class="range-scale"><span>1</span><span>100</span></div>
 
