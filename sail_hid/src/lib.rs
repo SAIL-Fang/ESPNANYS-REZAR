@@ -1,3 +1,7 @@
+// ESPNANYS-REZAR — open-source Razer BlackShark V2 HyperSpeed control app
+// Author: SAIL
+// Copyright (c) 2026 SAIL
+// SPDX-License-Identifier: MIT
 //! Windows HID transport for the Razer BlackShark V2 HyperSpeed.
 //!
 //! Uses the mature `hidapi` crate instead of hand-rolled SetupAPI/HID calls.

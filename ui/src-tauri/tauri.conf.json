@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "SAIL",
+  "productName": "ESPNANYS-REZAR",
   "version": "0.1.0",
   "identifier": "com.sail.control",
   "build": {
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "SAIL — BlackShark V2 HyperSpeed",
+        "title": "ESPNANYS-REZAR — BlackShark V2 HyperSpeed",
         "width": 1180,
         "height": 820,
         "minWidth": 1040,

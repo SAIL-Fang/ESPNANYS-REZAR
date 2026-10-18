@@ -1,3 +1,9 @@
+<!--
+  ESPNANYS-REZAR — open-source Razer BlackShark V2 HyperSpeed control app
+  Author: SAIL
+  Copyright (c) 2026 SAIL
+  SPDX-License-Identifier: MIT
+-->
 <script lang="ts">
   import { device } from "$lib/device.svelte";
 </script>
@@ -5,7 +11,7 @@
 <div class="page-head">
   <div>
     <h1>设置</h1>
-    <p>THX 是可选运行时依赖；SAIL 不打包、不重分发 THX 二进制。</p>
+    <p>THX 是可选运行时依赖；ESPNANYS-REZAR 不打包、不重分发 THX 二进制。</p>
   </div>
 </div>
 
@@ -27,8 +33,13 @@
 
 <section class="panel">
   <h2>关于</h2>
+  <dl class="kv">
+    <dt>项目</dt><dd>ESPNANYS-REZAR</dd>
+    <dt>作者</dt><dd>SAIL</dd>
+    <dt>许可证</dt><dd>MIT</dd>
+  </dl>
   <p class="muted">
-    SAIL 是独立的非官方控制台。HID 协议由本项目实现；声音处理复用用户已安装的 THX APO。
+    ESPNANYS-REZAR 是独立的非官方控制台。HID 协议由本项目实现；声音处理复用用户已安装的 THX APO。
     不包含 Razer/THX 的二进制或资产。
   </p>
   <p class="mono faint">sail_core · sail_hid · sail_app · sail_thx_bridge · sail_ui</p>

@@ -1,13 +1,16 @@
-# SAIL — 雷蛇耳机驱动替代：Razer BlackShark V2 HyperSpeed 控制台
+# ESPNANYS-REZAR — 雷蛇耳机驱动替代：Razer BlackShark V2 HyperSpeed 控制台
 
 > 一个不依赖雷云 4 的**雷蛇耳机驱动替代方案**：自己实现 HID 控制，可选复用已安装的 THX APO。
 > An open-source **Razer headset driver alternative** for BlackShark V2 HyperSpeed: native HID, Tauri UI, optional installed THX APO.
 
+> 显示名：**ESPNANYS-REZAR**；作者：**SAIL**。代码模块、二进制和安装目录仍沿用 `sail_*` / `SAIL` 前缀，以兼容已有命令、脚本和升级路径。
+> Display name: **ESPNANYS-REZAR**. Author: **SAIL**. The internal `sail_*` / `SAIL` module and install-path prefixes are intentionally kept for compatibility.
+
 **搜索关键词 / Search terms:** 雷蛇耳机驱动 · 雷蛇耳机驱动替代 · 禁用雷蛇耳机驱动更新 · 禁用雷云4更新 · 禁用雷云 4 更新 · 雷云4自动更新怎么关闭 · Razer BlackShark V2 HyperSpeed driver · disable Razer Synapse 4 updates
 
-[中文](#为什么会有-sail) · [English](#english)
+[中文](#为什么会有-espnanys-rezar) · [English](#english)
 
-## 为什么会有 SAIL
+## 为什么会有 ESPNANYS-REZAR
 
 我立项这个项目，不是因为想再做一个“游戏外设面板”，而是因为**雷云 4 的后台自动更新把耳机驱动弄掉过**。
 
@@ -15,7 +18,7 @@
 - 重新装驱动、回滚、重启，折腾很久才恢复；下一次更新又可能再来一次。
 - 我只想稳定地用耳机：电量、侧音、均衡器、声音标准化，不想每次开局前先赌驱动还在不在。
 
-所以 SAIL 的第一目标不是替代雷云的所有功能，而是：
+所以 ESPNANYS-REZAR 的第一目标不是替代雷云的所有功能，而是：
 
 1. **不依赖雷云也能控制耳机**（HID 自己实现）。
 2. **不让雷云的后台更新再次把驱动弄掉**。
@@ -57,14 +60,14 @@ powershell -ExecutionPolicy Bypass -File .\scripts\razer-update-core.ps1 -Status
 
 ## 它是什么
 
-- 产品名：**SAIL**（`sail_core` / `sail_hid` / `sail_app` / `sail_thx_bridge` / `sail_ui`）
+- 产品名：**ESPNANYS-REZAR**（内部模块仍为 `sail_core` / `sail_hid` / `sail_app` / `sail_thx_bridge` / `sail_ui`）
 - 设备：**Razer BlackShark V2 HyperSpeed**（Windows 显示为 *Razer BlackShark V2 HS 2.4*，中文 *旋风黑鲨 V2 极速版*）
 - 无线接收器：`VID 0x1532 / PID 0x0565`
 - 有线 USB：`VID 0x1532 / PID 0x056E`
 - 测试环境：Windows 11，Rust 1.99（MSVC），Tauri 2 + Svelte 5，Razer Synapse 4.0.827
 - 实测固件：**1.6.11.0**；序列号已脱敏
 
-> THX 是可选运行时依赖：SAIL **不打包、不重分发** THX/Razer 的 DLL/APO。
+> THX 是可选运行时依赖：ESPNANYS-REZAR **不打包、不重分发** THX/Razer 的 DLL/APO。
 > 只调用用户自己安装的 `ThxV3Native_v1.1.42.1.dll`。
 
 ## 30 秒上手
@@ -85,9 +88,9 @@ powershell -ExecutionPolicy Bypass -File .\scripts\razer-update-core.ps1 -Status
 
 ## English
 
-### SAIL — a Razer headset driver alternative for BlackShark V2 HyperSpeed
+### ESPNANYS-REZAR — a Razer headset driver alternative for BlackShark V2 HyperSpeed
 
-SAIL is an independent, open-source **Razer headset driver alternative** for the Razer BlackShark V2 HyperSpeed (wireless `1532:0565`, wired `1532:056E`). It was started after a **Razer Synapse 4 background auto-update knocked the headset driver out**: the device disappeared from Windows audio and games, and recovering it took far too long. SAIL exists so the headset can be controlled — and kept stable — without depending on Synapse.
+ESPNANYS-REZAR is an independent, open-source **Razer headset driver alternative** for the Razer BlackShark V2 HyperSpeed (wireless `1532:0565`, wired `1532:056E`). It was started after a **Razer Synapse 4 background auto-update knocked the headset driver out**: the device disappeared from Windows audio and games, and recovering it took far too long. ESPNANYS-REZAR exists so the headset can be controlled — and kept stable — without depending on Synapse.
 
 - Native HID control: battery, charging, firmware, serial, sidetone, EQ, device flags.
 - Optional THX APO reuse: sound normalization and THX processing via the copy already installed on your PC.
@@ -122,7 +125,7 @@ scripts\ui.cmd build --debug --no-bundle
 scripts\run-ui.cmd                # run the Tauri app from a short path
 ```
 
-THX is optional. If it is installed, SAIL can reuse it; if not, HID features still work.
+THX is optional. If it is installed, ESPNANYS-REZAR can reuse it; if not, HID features still work.
 
 ### Search terms
 
@@ -130,7 +133,7 @@ Razer headset driver · Razer headset driver alternative · disable Razer Synaps
 
 > This is an interoperability project for hardware you own. It does not bypass DRM or licensing, and it does not redistribute Razer/THX binaries. The update switch is a local, reversible convenience — re-check it after Razer changes its updater.
 
-## SAIL 当前实现
+## 当前实现
 
 | 模块 | 状态 | 说明 |
 |---|---|---|
@@ -158,7 +161,7 @@ ui/src/lib         api.ts / device.svelte.ts / components/
 `DeviceSnapshot` 的字段是 `Field<T>`，单字段 timeout 不会让整个 status 失败；  
 有线模式现在会显示“有线已连接 / 控制未就绪”，而不是误报“未连接”。
 
-![SAIL 声音页](captures/screenshots/sail-ui.png)
+![ESPNANYS-REZAR 声音页](captures/screenshots/sail-ui.png)
 
 ### 构建 / 运行
 
@@ -303,7 +306,7 @@ firmware: 1.6.11.0
 serial: ...
 ```
 
-设备也会异步推 `record 33/42`，并把最后一条事件缓存在 **feature report 2**；SAIL 用它作为 timeout 时的兜底，但主动读成功时以主动读为准。协议细节见 [docs/wired-events.md](docs/wired-events.md)。
+设备也会异步推 `record 33/42`，并把最后一条事件缓存在 **feature report 2**；ESPNANYS-REZAR 用它作为 timeout 时的兜底，但主动读成功时以主动读为准。协议细节见 [docs/wired-events.md](docs/wired-events.md)。
 
 排查命令：
 
@@ -371,7 +374,7 @@ razer-blackshark-v2-hyperspeed/
 ├─ README.md                  # 本文件
 ├─ Cargo.toml                 # Rust workspace
 ├─ protocol.json              # 机器可读的 HID 协议表
-├─ DESIGN.md                  # SAIL 最终设计系统（颜色/字体/组件/状态）
+├─ DESIGN.md                  # ESPNANYS-REZAR 最终设计系统（颜色/字体/组件/状态）
 ├─ sail_core/                 # 协议帧/命令/响应/事件（无 OS 依赖）
 ├─ sail_hid/                  # Windows HID（hidapi）
 ├─ sail_app/                  # 应用编排 + DeviceSnapshot/Field + ThxHost

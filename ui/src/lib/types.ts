@@ -1,3 +1,9 @@
+/**
+ * ESPNANYS-REZAR — open-source Razer BlackShark V2 HyperSpeed control app
+ * Author: SAIL
+ * Copyright (c) 2026 SAIL
+ * SPDX-License-Identifier: MIT
+ */
 export type Field<T> =
   | { state: "known"; value: T }
   | { state: "unsupported" }

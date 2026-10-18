@@ -1,3 +1,7 @@
+// ESPNANYS-REZAR — open-source Razer BlackShark V2 HyperSpeed control app
+// Author: SAIL
+// Copyright (c) 2026 SAIL
+// SPDX-License-Identifier: MIT
 //! Minimal SAIL bridge to the installed THX APO control DLL.
 //!
 //! This does not bundle THX. It loads the user's installed

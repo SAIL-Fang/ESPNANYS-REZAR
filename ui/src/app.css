@@ -1,3 +1,9 @@
+/*
+ * ESPNANYS-REZAR — open-source Razer BlackShark V2 HyperSpeed control app
+ * Author: SAIL
+ * Copyright (c) 2026 SAIL
+ * SPDX-License-Identifier: MIT
+ */
 :root {
   --sail-bg: #e8edf2;
   --sail-ink: #15181e;
@@ -72,11 +78,13 @@ button:focus-visible, input:focus-visible {
   align-items: baseline;
   gap: 8px;
   padding: 0 10px 26px;
-  font-size: 14px;
+  color: var(--sail-ink);
+  font-size: 11.5px;
   font-weight: 700;
-  letter-spacing: 0.2em;
+  letter-spacing: 0.12em;
+  white-space: nowrap;
 }
-.brand span { color: var(--sail-faint); font-size: 9px; letter-spacing: 0.12em; font-weight: 500; }
+.brand .brand-short { display: none; }
 
 .side-nav { display: grid; gap: 3px; }
 .side-nav button {
@@ -457,8 +465,9 @@ input[type="range"] { accent-color: var(--sail-blue); }
 @media (max-width: 1080px) {
   .app-shell { grid-template-columns: 68px minmax(0, 1fr); padding: 10px; }
   .sidebar { padding: 18px 7px 12px; }
-  .brand { padding: 0 7px 20px; font-size: 12px; }
-  .brand span { display: none; }
+  .brand { padding: 0 7px 20px; font-size: 11px; letter-spacing: 0.08em; }
+  .brand .brand-full { display: none; }
+  .brand .brand-short { display: inline; }
   .side-nav button { justify-content: center; padding: 0; }
   .side-nav button span { display: none; }
   .side-device { display: none; }

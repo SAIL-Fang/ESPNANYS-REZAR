@@ -1,3 +1,9 @@
+/**
+ * ESPNANYS-REZAR — open-source Razer BlackShark V2 HyperSpeed control app
+ * Author: SAIL
+ * Copyright (c) 2026 SAIL
+ * SPDX-License-Identifier: MIT
+ */
 import { defineConfig } from "vite";
 import { sveltekit } from "@sveltejs/kit/vite";
 // @ts-expect-error type error without @types/node package

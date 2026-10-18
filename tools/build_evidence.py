@@ -1,3 +1,7 @@
+# ESPNANYS-REZAR — open-source Razer BlackShark V2 HyperSpeed control app
+# Author: SAIL
+# Copyright (c) 2026 SAIL
+# SPDX-License-Identifier: MIT
 """Build concise evidence files from the captured logs."""
 import os
 import pathlib

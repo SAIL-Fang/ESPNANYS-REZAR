@@ -1,4 +1,8 @@
-﻿#requires -Version 5.1
+# ESPNANYS-REZAR — open-source Razer BlackShark V2 HyperSpeed control app
+# Author: SAIL
+# Copyright (c) 2026 SAIL
+# SPDX-License-Identifier: MIT
+#requires -Version 5.1
 <#
 .SYNOPSIS
     SAIL · 控制 Razer Synapse / THX 自动更新。

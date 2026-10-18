@@ -1,3 +1,9 @@
+<!--
+  ESPNANYS-REZAR — open-source Razer BlackShark V2 HyperSpeed control app
+  Author: SAIL
+  Copyright (c) 2026 SAIL
+  SPDX-License-Identifier: MIT
+-->
 <script lang="ts">
   import { device } from "$lib/device.svelte";
   import { chargingText, fieldText } from "$lib/types";
@@ -37,7 +43,7 @@
 
 <div class="app-shell">
   <aside class="sidebar">
-    <div class="brand">SAIL <span>STUDIO</span></div>
+    <div class="brand"><span class="brand-full">ESPNANYS-REZAR</span><span class="brand-short">ER</span></div>
 
     <nav class="side-nav" aria-label="主导航">
       <button class:active={tab === "device"} onclick={() => (tab = "device")} aria-label="设备">

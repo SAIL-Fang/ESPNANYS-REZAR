@@ -1,3 +1,9 @@
+<!--
+  ESPNANYS-REZAR — open-source Razer BlackShark V2 HyperSpeed control app
+  Author: SAIL
+  Copyright (c) 2026 SAIL
+  SPDX-License-Identifier: MIT
+-->
 <script lang="ts">
   import { onMount } from "svelte";
   import { device } from "$lib/device.svelte";
@@ -34,7 +40,7 @@
 </script>
 
 <header class="status-strip">
-  <div class="topbar-context">SAIL <span>›</span> <b>{label}</b></div>
+  <div class="topbar-context">ESPNANYS-REZAR <span>›</span> <b>{label}</b></div>
   <div class="status-item">
     <span class="dot" class:on={device.status?.connected}></span>
     <strong>{device.loading ? "读取中…" : linkText()}</strong>

@@ -1,3 +1,9 @@
+<!--
+  ESPNANYS-REZAR — open-source Razer BlackShark V2 HyperSpeed control app
+  Author: SAIL
+  Copyright (c) 2026 SAIL
+  SPDX-License-Identifier: MIT
+-->
 <script lang="ts">
   import { device } from "$lib/device.svelte";
   import { chargingText, fieldText } from "$lib/types";
