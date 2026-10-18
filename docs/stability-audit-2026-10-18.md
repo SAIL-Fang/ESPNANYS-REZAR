@@ -42,6 +42,7 @@ Fix (updated per user request): the sound page now starts with an explicit **def
 - **Default output was not checked.** `sail_app` now enumerates Windows render endpoints through Core Audio and exposes `audioOutput`; a blocking modal offers a one-click `IPolicyConfig` default switch and an endpoint selector. It is user-mode COM, not a kernel driver. `sail_cli audio-default` exposes the same operation.
 - **No tray resident mode.** Added a Tauri tray icon with Show / Quit; closing the window hides to the tray. Tray settings/autostart are still pending.
 - **THX helper could hang indefinitely.** `ProcessThxHost::run` now polls with an 8-second deadline and kills the child on timeout.
+- **Audio dropped briefly every 10 seconds.** The silent UI poll spawned `sail_thx status --json` every 10s. Each helper open calls `SetDefaultRenderDevice`, which interrupts the active render stream. Fixed: silent polls skip THX entirely (THX refreshes at startup, manual refresh, and after THX writes), and polling pauses while the window is hidden. Reproduced before the fix and confirmed gone after restart.
 - **THX container discovery could pick a different BlackShark.** It now accepts only exact BlackShark V2 HyperSpeed / V2 HS names, prefers type 0, and fails with an explicit error instead of falling back to the hardcoded container. `SAIL_THX_CONTAINER` remains the explicit override.
 - **Installer only warned on `pnputil` failure.** Missing driver backup and any nonzero `pnputil` result now fail the install; `-SkipThx` remains the explicit opt-out.
 

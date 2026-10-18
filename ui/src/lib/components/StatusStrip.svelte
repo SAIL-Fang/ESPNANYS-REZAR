@@ -17,7 +17,13 @@
 
   onMount(() => {
     if (!device.status && !device.thx) device.refresh();
-    const timer = setInterval(() => device.refresh(true), 10_000);
+    // Do not spawn the THX helper every 10 seconds: its DLL binding calls
+    // SetDefaultRenderDevice and can briefly interrupt playback. THX state is
+    // refreshed on startup, explicit refresh, and after THX writes.
+    const timer = setInterval(() => {
+      if (document.hidden) return;
+      void device.refresh(true, false);
+    }, 10_000);
     return () => clearInterval(timer);
   });
 

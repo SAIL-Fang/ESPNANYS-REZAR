@@ -49,7 +49,7 @@ export class DeviceStore {
     if (epoch === this.refreshEpoch) apply();
   }
 
-  async refresh(silent = false) {
+  async refresh(silent = false, includeThx = true) {
     // A write owns the device; do not overlap it with a 10-second poll.
     if (this.busy) return;
     const epoch = ++this.refreshEpoch;
@@ -80,19 +80,21 @@ export class DeviceStore {
           }
         });
       }
-      try {
-        const thx = await api.getThxStatus();
-        this.settle(epoch, () => {
-          this.thx = thx;
-          this.thxReadError = "";
-        });
-      } catch (error) {
-        this.settle(epoch, () => {
-          if (!silent) {
-            this.thx = null;
-            this.thxReadError = `无法读取 THX：${errorText(error)}`;
-          }
-        });
+      if (includeThx) {
+        try {
+          const thx = await api.getThxStatus();
+          this.settle(epoch, () => {
+            this.thx = thx;
+            this.thxReadError = "";
+          });
+        } catch (error) {
+          this.settle(epoch, () => {
+            if (!silent) {
+              this.thx = null;
+              this.thxReadError = `无法读取 THX：${errorText(error)}`;
+            }
+          });
+        }
       }
       try {
         const presets = await api.getEqPresets();
