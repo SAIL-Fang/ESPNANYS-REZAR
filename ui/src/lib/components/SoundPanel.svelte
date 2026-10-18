@@ -66,7 +66,7 @@
 <div class="page-head">
   <div>
     <h1>声音</h1>
-    <p>为这副耳机调出你想要的空间和力度。每个频段都能直接输入数值，不必和细小的滑杆较劲。</p>
+    <p>拖动曲线上的圆点调整，或直接输入数值。当前频段会同步显示。</p>
   </div>
   <span class="badge" class:ok={available} class:warn={!available}>
     {available ? `THX ${device.thx?.level ?? "—"}` : "THX 未安装"}

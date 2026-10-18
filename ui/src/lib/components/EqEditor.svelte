@@ -11,10 +11,12 @@
   let { gains, frequencies, busy, oninput, onapply, onreset }: Props = $props();
 
   let active = $state(3);
+  let graphEl: HTMLDivElement;
+  let dragIndex = $state<number | null>(null);
 
   let points = $derived(
     gains
-      .map((gain, index) => `${(index / Math.max(1, gains.length - 1)) * 100},${50 - (gain / 12) * 40}`)
+      .map((gain, index) => `${(index / Math.max(1, gains.length - 1)) * 100},${50 - gain * 3.5}`)
       .join(" ")
   );
 
@@ -35,6 +37,44 @@
     oninput(index, clamp((gains[index] ?? 0) + delta));
   }
 
+  function gainAt(clientY: number): number {
+    const rect = graphEl.getBoundingClientRect();
+    const ratio = Math.max(0, Math.min(1, (clientY - rect.top) / rect.height));
+    return clamp((50 - ratio * 100) / 3.5);
+  }
+
+  function startDrag(event: PointerEvent, index: number) {
+    event.preventDefault();
+    active = index;
+    dragIndex = index;
+    const dot = event.currentTarget as HTMLButtonElement;
+    dot.focus();
+    dot.setPointerCapture(event.pointerId);
+    oninput(index, gainAt(event.clientY));
+  }
+
+  function moveDrag(event: PointerEvent, index: number) {
+    if (dragIndex === index) {
+      oninput(index, gainAt(event.clientY));
+    }
+  }
+
+  function endDrag(event: PointerEvent, index: number) {
+    if (dragIndex !== index) return;
+    dragIndex = null;
+    const dot = event.currentTarget as HTMLButtonElement;
+    if (dot.hasPointerCapture(event.pointerId)) {
+      dot.releasePointerCapture(event.pointerId);
+    }
+  }
+
+  function dotKeydown(event: KeyboardEvent, index: number) {
+    if (event.key === "ArrowUp" || event.key === "ArrowDown") {
+      event.preventDefault();
+      step(index, event.key === "ArrowUp" ? 1 : -1);
+    }
+  }
+
   function onKeydown(event: KeyboardEvent) {
     if (event.key === "Enter") {
       event.preventDefault();
@@ -43,7 +83,7 @@
   }
 </script>
 
-<div class="eq-graph" aria-label="均衡器曲线">
+<div class="eq-graph" aria-label="均衡器曲线" bind:this={graphEl}>
   <span class="eq-unit">−12 dB / +12 dB</span>
   <span class="eq-axis" style="top:8%">+12</span>
   <span class="eq-axis" style="top:29%">+6</span>
@@ -80,13 +120,21 @@
       stroke-linejoin="round"
     />
   </svg>
-  <div class="eq-dots" aria-hidden="true">
+  <div class="eq-dots">
     {#each gains as gain, index}
-      <span
+      <button
+        type="button"
         class="eq-dot"
         class:active={index === active}
-        style={`left:${(index / Math.max(1, gains.length - 1)) * 100}%;top:${50 - (gain / 12) * 40}%`}
-      ></span>
+        style={`left:${(index / Math.max(1, gains.length - 1)) * 100}%;top:${50 - gain * 3.5}%`}
+        aria-label={`${frequencies[index]} Hz 当前 ${gain} dB，拖动或方向键调整`}
+        title={`${frequencies[index]} Hz · ${gain > 0 ? "+" : ""}${gain} dB`}
+        onpointerdown={(event) => startDrag(event, index)}
+        onpointermove={(event) => moveDrag(event, index)}
+        onpointerup={(event) => endDrag(event, index)}
+        onpointercancel={(event) => endDrag(event, index)}
+        onkeydown={(event) => dotKeydown(event, index)}
+      ></button>
     {/each}
   </div>
 </div>
@@ -109,21 +157,6 @@
         />
         <button type="button" aria-label={`${frequency} Hz 加 1 dB`} onclick={() => step(index, 1)}>+</button>
       </div>
-      <div class="vertical-fader">
-        <span
-          class="fader-fill"
-          style={`top:${Math.min(50, 50 - (gains[index] / 12) * 40)}%;height:${Math.abs((gains[index] / 12) * 40)}%`}
-        ></span>
-        <input
-          type="range"
-          min="-12"
-          max="12"
-          step="1"
-          value={gains[index]}
-          aria-label={`${frequency} Hz 滑杆`}
-          oninput={(event) => setGain(index, event.currentTarget.value)}
-        />
-      </div>
       <span class="freq">{frequency}<span>Hz</span></span>
     </div>
   {/each}
@@ -131,7 +164,7 @@
 
 <div class="eq-actions">
   <div class="eq-hint">
-    <kbd>↑</kbd><kbd>↓</kbd> 微调 <span>·</span> 输入后按 <kbd>Enter</kbd> 写入 <span>·</span> 范围 −12 到 +12 dB
+    拖动曲线上的圆点调整 <span>·</span> 也可直接输入 dB <span>·</span> 输入后按 <kbd>Enter</kbd> 写入 <span>·</span> 范围 −12 到 +12 dB
   </div>
   <div class="actions">
     <button class="btn" type="button" onclick={onreset} disabled={busy}>恢复平直</button>
