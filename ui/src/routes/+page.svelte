@@ -10,16 +10,18 @@
   import StatusStrip from "$lib/components/StatusStrip.svelte";
   import DevicePanel from "$lib/components/DevicePanel.svelte";
   import SoundPanel from "$lib/components/SoundPanel.svelte";
+  import DemoPanel from "$lib/components/DemoPanel.svelte";
   import MicPanel from "$lib/components/MicPanel.svelte";
   import SettingsPanel from "$lib/components/SettingsPanel.svelte";
 
-  type Tab = "device" | "sound" | "mic" | "settings";
+  type Tab = "device" | "sound" | "demo" | "mic" | "settings";
 
   let tab = $state<Tab>("sound");
 
   const labels: Record<Tab, string> = {
     device: "设备",
     sound: "声音",
+    demo: "演示",
     mic: "麦克风",
     settings: "设置"
   };
@@ -54,6 +56,10 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2.2"/><circle cx="8" cy="17" r="2.2"/></svg>
         <span>声音</span>
       </button>
+      <button class:active={tab === "demo"} onclick={() => (tab = "demo")} aria-label="演示">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M8 5.5v13l10-6.5z"/><circle cx="12" cy="12" r="9" opacity=".35"/></svg>
+        <span>演示</span>
+      </button>
       <button class:active={tab === "mic"} onclick={() => (tab = "mic")} aria-label="麦克风">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><rect x="8" y="3.5" width="8" height="12" rx="4"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3M9 21h6"/></svg>
         <span>麦克风</span>
@@ -84,6 +90,8 @@
         <DevicePanel />
       {:else if tab === "sound"}
         <SoundPanel />
+      {:else if tab === "demo"}
+        <DemoPanel />
       {:else if tab === "mic"}
         <MicPanel />
       {:else}

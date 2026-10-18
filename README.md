@@ -94,6 +94,7 @@ ESPNANYS-REZAR is an independent, open-source **Razer headset driver alternative
 
 - Native HID control: battery, charging, firmware, serial, sidetone, EQ, device flags.
 - Optional THX APO reuse: sound normalization, stereo/spatial toggle, and THX processing via the copy already installed on your PC.
+- Built-in spatial demo: an original SVG radar and Web Audio test sound; no Razer/THX media is bundled.
 - A Tauri 2 + Svelte 5 desktop UI with a directly draggable EQ curve and per-band dB input.
 - A reversible **disable Razer Synapse 4 / driver auto-updates** switch.
 - No Razer or THX binaries are bundled or redistributed.
@@ -142,7 +143,7 @@ Razer headset driver · Razer headset driver alternative · disable Razer Synaps
 | `sail_app` | ✅ | 应用编排、`Field` 部分成功快照、THX host 接缝；CLI/UI 共用 |
 | `sail_cli` | ✅ 实测 | `status` / `battery` / `sidetone` / `eq-preset` / `eq-gains` |
 | `sail_thx_bridge` | ✅ 实测 | 加载已安装 THX DLL；`verify`：写 1 → 回读 1 → 恢复 10 |
-| `sail_ui` | ✅ 首版 | Tauri 2 + Svelte 5；可直接拖曲线 / 输入 dB 的均衡器、声音标准化 1–100、立体声 / THX 空间音效切换 |
+| `sail_ui` | ✅ 首版 | Tauri 2 + Svelte 5；可直接拖曲线 / 输入 dB 的均衡器、声音标准化 1–100、立体声 / THX 空间音效切换、实时合成演示 |
 | 麦克风 THX 参数 | ⏳ | 噪声门/降噪/标准化/亮丽人声/麦克风 EQ 下一阶段 |
 | 托盘/配置/开机启动 | ⏳ | 下一阶段 |
 
@@ -162,6 +163,10 @@ ui/src/lib         api.ts / device.svelte.ts / components/
 有线模式现在会显示“有线已连接 / 控制未就绪”，而不是误报“未连接”。
 
 ![ESPNANYS-REZAR 声音页](captures/screenshots/sail-ui.png)
+
+![ESPNANYS-REZAR 演示页](captures/screenshots/sail-demo.png)
+
+> 演示页的雷达动画和试听音频都是本项目独立实现的：SVG + Web Audio 实时合成，不包含雷蛇/THX 的视频或音频素材。
 
 ### 构建 / 运行
 
@@ -399,6 +404,7 @@ razer-blackshark-v2-hyperspeed/
 └─ captures/
    ├─ protocol.log            # Synapse 的 HID 原始日志（hex）
    ├─ screenshots/sail-ui.png # 首版 SAIL UI 截图
+   ├─ screenshots/sail-demo.png # 实时合成空间音频演示
    ├─ THXDLL_V3CommonSubProcess.log
    ├─ ThxV3NativeSubProcess.log
    ├─ thx-userstate.json      # HKCU\Software\THX\SpatialAudio\UserState
