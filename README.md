@@ -1,6 +1,61 @@
-# SAIL — Razer BlackShark V2 HyperSpeed 控制台
+# SAIL — 雷蛇耳机驱动替代：Razer BlackShark V2 HyperSpeed 控制台
 
-目标：在不依赖 Razer Synapse 的情况下，自己实现耳机控制（HID），并复用已安装的 THX APO 做声音处理。
+> 一个不依赖雷云 4 的**雷蛇耳机驱动替代方案**：自己实现 HID 控制，可选复用已安装的 THX APO。
+> An open-source **Razer headset driver alternative** for BlackShark V2 HyperSpeed: native HID, Tauri UI, optional installed THX APO.
+
+**搜索关键词 / Search terms:** 雷蛇耳机驱动 · 雷蛇耳机驱动替代 · 禁用雷蛇耳机驱动更新 · 禁用雷云4更新 · 禁用雷云 4 更新 · 雷云4自动更新怎么关闭 · Razer BlackShark V2 HyperSpeed driver · disable Razer Synapse 4 updates
+
+[中文](#为什么会有-sail) · [English](#english)
+
+## 为什么会有 SAIL
+
+我立项这个项目，不是因为想再做一个“游戏外设面板”，而是因为**雷云 4 的后台自动更新把耳机驱动弄掉过**。
+
+- 一次自动更新后，Windows 音频设备里的 BlackShark 直接消失，游戏里也没声音。
+- 重新装驱动、回滚、重启，折腾很久才恢复；下一次更新又可能再来一次。
+- 我只想稳定地用耳机：电量、侧音、均衡器、声音标准化，不想每次开局前先赌驱动还在不在。
+
+所以 SAIL 的第一目标不是替代雷云的所有功能，而是：
+
+1. **不依赖雷云也能控制耳机**（HID 自己实现）。
+2. **不让雷云的后台更新再次把驱动弄掉**。
+3. THX 声音处理继续复用用户机器上已经安装的 APO，不打包、不分发雷蛇/THX 的二进制。
+
+> 这不是“破解雷云”，也不是驱动破解；它只做自己拥有设备上的互操作控制，并提供一个可逆的更新开关。
+
+## 禁用雷蛇耳机驱动 / 雷云 4 自动更新
+
+脚本就在仓库里，三个入口：
+
+```text
+scripts\razer-update-off.cmd      # 关闭：挡更新 CDN + 禁用升级任务（需管理员）
+scripts\razer-update-core.ps1     # 实际逻辑；可 -Status / -Disable / -Enable
+scripts\razer-update-on.cmd       # 恢复：还原 hosts + 启用升级任务（需管理员）
+```
+
+以管理员身份打开 PowerShell：
+
+```powershell
+# 关闭雷云 4 / 雷蛇耳机驱动的后台自动更新
+.\scripts\razer-update-off.cmd
+
+# 只查看当前状态，不改任何东西
+powershell -ExecutionPolicy Bypass -File .\scripts\razer-update-core.ps1 -Status
+
+# 想恢复自动更新时
+.\scripts\razer-update-on.cmd
+```
+
+它具体做两件事：
+
+- 在 `hosts` 中把更新下载 CDN `app-assets.razer.com` 指向 `0.0.0.0`；
+- 禁用计划任务 `Razer Upgrade Elevation Service`。
+
+**不会**修改 `apps.razer.com`（雷云 UI）、`VSSrv`、THX APO 或 HID；关闭后只是不再自动获得 Synapse/THX 更新。执行结束会打印 hosts、计划任务、Razer Elevation Service、VSSrv 的验证结果，不保存日志。
+
+> 这是本机可逆开关，不是系统级“驱动锁”。Razer 以后如果更换 CDN/任务名，脚本可能失效；升级后先用 `-Status` 复查。企业设备或别人的电脑，先获得授权再运行。
+
+## 它是什么
 
 - 产品名：**SAIL**（`sail_core` / `sail_hid` / `sail_app` / `sail_thx_bridge` / `sail_ui`）
 - 设备：**Razer BlackShark V2 HyperSpeed**（Windows 显示为 *Razer BlackShark V2 HS 2.4*，中文 *旋风黑鲨 V2 极速版*）
@@ -16,6 +71,8 @@
 
 | 场景 | 命令 |
 |---|---|
+| 关闭雷蛇自动更新 | `scripts\razer-update-off.cmd`（管理员） |
+| 恢复雷蛇自动更新 | `scripts\razer-update-on.cmd`（管理员） |
 | 编译 HID/THX/CLI | `scripts\build.cmd -Stage` |
 | 验证 THX 1–100 | `%LOCALAPPDATA%\SAIL\bin\sail_thx.exe verify` |
 | 备份当前 THX APO | `scripts\backup-thx.cmd -Destination D:\Backup\THX` |
@@ -26,16 +83,63 @@
 
 详细说明见下面的“构建 / 运行”“私有备份”“一键部署”“版本冻结”章节。
 
+## English
+
+### SAIL — a Razer headset driver alternative for BlackShark V2 HyperSpeed
+
+SAIL is an independent, open-source **Razer headset driver alternative** for the Razer BlackShark V2 HyperSpeed (wireless `1532:0565`, wired `1532:056E`). It was started after a **Razer Synapse 4 background auto-update knocked the headset driver out**: the device disappeared from Windows audio and games, and recovering it took far too long. SAIL exists so the headset can be controlled — and kept stable — without depending on Synapse.
+
+- Native HID control: battery, charging, firmware, serial, sidetone, EQ, device flags.
+- Optional THX APO reuse: sound normalization and THX processing via the copy already installed on your PC.
+- A Tauri 2 + Svelte 5 desktop UI with a directly draggable EQ curve and per-band dB input.
+- A reversible **disable Razer Synapse 4 / driver auto-updates** switch.
+- No Razer or THX binaries are bundled or redistributed.
+
+### Disable Razer Synapse 4 / Razer headset driver updates
+
+Run as Administrator from the repository root:
+
+```powershell
+# Disable background auto-updates
+.\scripts\razer-update-off.cmd
+
+# Read-only status
+powershell -ExecutionPolicy Bypass -File .\scripts\razer-update-core.ps1 -Status
+
+# Restore auto-updates
+.\scripts\razer-update-on.cmd
+```
+
+The script points the update CDN `app-assets.razer.com` to `0.0.0.0` in the hosts file and disables the scheduled task `Razer Upgrade Elevation Service`. It does **not** touch `apps.razer.com`, `VSSrv`, the THX APO, or HID. It is reversible and does not save logs.
+
+### Build and run
+
+Requirements: Windows 11, Visual Studio C++ Build Tools, Rust MSVC, Node.js + pnpm/npm.
+
+```powershell
+scripts\build.cmd -Stage          # build Rust CLI/THX helper
+scripts\ui.cmd build --debug --no-bundle
+scripts\run-ui.cmd                # run the Tauri app from a short path
+```
+
+THX is optional. If it is installed, SAIL can reuse it; if not, HID features still work.
+
+### Search terms
+
+Razer headset driver · Razer headset driver alternative · disable Razer Synapse 4 updates · disable Razer headset driver update · BlackShark V2 HyperSpeed driver · Razer Synapse 4 auto-update off
+
+> This is an interoperability project for hardware you own. It does not bypass DRM or licensing, and it does not redistribute Razer/THX binaries. The update switch is a local, reversible convenience — re-check it after Razer changes its updater.
+
 ## SAIL 当前实现
 
 | 模块 | 状态 | 说明 |
 |---|---|---|
-| `sail_core` | ✅ | 64 字节帧、seq、checksum、命令/响应/事件；6 个 mock 测试 |
+| `sail_core` | ✅ | 64 字节帧、seq、checksum、命令/响应/事件；8 个 mock 测试 |
 | `sail_hid` | ✅ 实测 | `hidapi` 枚举 0xFF14、真实电量/固件/序列号 |
 | `sail_app` | ✅ | 应用编排、`Field` 部分成功快照、THX host 接缝；CLI/UI 共用 |
 | `sail_cli` | ✅ 实测 | `status` / `battery` / `sidetone` / `eq-preset` / `eq-gains` |
 | `sail_thx_bridge` | ✅ 实测 | 加载已安装 THX DLL；`verify`：写 1 → 回读 1 → 恢复 10 |
-| `sail_ui` | ✅ 首版 | Tauri 2 + Svelte 5；`$lib` API/store + 拆分组件；声音页 1–100、EQ |
+| `sail_ui` | ✅ 首版 | Tauri 2 + Svelte 5；可直接拖曲线 / 输入 dB 的均衡器、声音标准化 1–100 |
 | 麦克风 THX 参数 | ⏳ | 噪声门/降噪/标准化/亮丽人声/麦克风 EQ 下一阶段 |
 | 托盘/配置/开机启动 | ⏳ | 下一阶段 |
 
