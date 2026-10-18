@@ -25,6 +25,7 @@
 
 use std::ffi::{c_char, c_int, c_void, CStr, CString};
 use std::fmt;
+use std::os::windows::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 
 pub const CONTAINER: &str = "{FEC3BF0F-2180-5CED-AEEB-DFB45C54FB17}";
@@ -46,7 +47,7 @@ const RETRY_DELAY_MS: u64 = 80;
 
 #[link(name = "kernel32")]
 extern "system" {
-    fn LoadLibraryA(lp_lib_file_name: *const u8) -> *mut c_void;
+    fn LoadLibraryW(lp_lib_file_name: *const u16) -> *mut c_void;
     fn GetProcAddress(h_module: *mut c_void, lp_proc_name: *const u8) -> *mut c_void;
     fn FreeLibrary(h_lib_module: *mut c_void) -> i32;
 }
@@ -86,6 +87,7 @@ pub struct ThxStatus {
     pub endpoint: Option<String>,
     pub enabled: Option<bool>,
     pub level: Option<i32>,
+    pub spatial_enabled: Option<bool>,
 }
 
 pub struct ThxBridge {
@@ -179,9 +181,12 @@ impl ThxBridge {
         if !dll.is_file() {
             return Err(ThxError::DllNotFound(dll));
         }
-        let ansi = CString::new(dll.to_string_lossy().as_bytes())
-            .map_err(|e| ThxError::Load(e.to_string()))?;
-        let module = unsafe { LoadLibraryA(ansi.as_ptr() as *const u8) };
+        let wide: Vec<u16> = dll
+            .as_os_str()
+            .encode_wide()
+            .chain(std::iter::once(0))
+            .collect();
+        let module = unsafe { LoadLibraryW(wide.as_ptr()) };
         if module.is_null() {
             return Err(ThxError::Load(format!(
                 "LoadLibraryA({}): {}",
@@ -221,6 +226,9 @@ impl ThxBridge {
             .and_then(|json| json_string(&json, "id"))
             .ok_or(ThxError::NoRenderDevice)?;
         let endpoint_c = CString::new(endpoint).map_err(|e| ThxError::Status(e.to_string()))?;
+        // The DLL needs a selected render device before per-endpoint getters
+        // work, including in passive mode. This is a device binding, not a
+        // normalization/level write.
         let set_default: FnBool1 = unsafe { self.sym(b"SetDefaultRenderDevice\0")? };
         let _ = unsafe { set_default(endpoint_c.as_ptr()) };
 
@@ -295,7 +303,31 @@ impl ThxBridge {
             endpoint: self.endpoint().map(ToOwned::to_owned),
             enabled: self.get_enabled().ok(),
             level: self.get_level().ok(),
+            spatial_enabled: self.get_spatial().ok(),
         })
+    }
+
+    pub fn get_spatial(&self) -> Result<bool, ThxError> {
+        let f: FnBool1 = unsafe { self.sym(b"GetRenderSpatialProcessing\0")? };
+        Ok(unsafe { f(self.container.as_ptr()) })
+    }
+
+    pub fn set_spatial(&self, enabled: bool) -> Result<(), ThxError> {
+        let f: FnBool2 = unsafe { self.sym(b"SetRenderSpatialProcessing\0")? };
+        for attempt in 0..RETRIES {
+            if unsafe { f(self.container.as_ptr(), enabled) } {
+                return Ok(());
+            }
+            if self.get_spatial().map(|v| v == enabled).unwrap_or(false) {
+                return Ok(());
+            }
+            if attempt + 1 < RETRIES {
+                std::thread::sleep(std::time::Duration::from_millis(RETRY_DELAY_MS));
+            }
+        }
+        Err(ThxError::Status(
+            "SetRenderSpatialProcessing returned false".into(),
+        ))
     }
 
     fn render_device_json(&self) -> Result<Option<String>, ThxError> {
@@ -422,6 +454,13 @@ pub fn print_status(status: &ThxStatus) {
             .level
             .map(|v| v.to_string())
             .unwrap_or_else(|| "unknown".to_string())
+    );
+    println!(
+        "spatial: {}",
+        status
+            .spatial_enabled
+            .map(|v| if v { "on" } else { "off" })
+            .unwrap_or("unknown")
     );
 }
 

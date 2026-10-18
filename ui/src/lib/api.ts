@@ -17,5 +17,6 @@ export const api = {
   setNormalization: (level: number) => invoke<void>("set_normalization", { level }),
   setNormalizationEnabled: (enabled: boolean) =>
     invoke<void>("set_normalization_enabled", { enabled }),
+  setSpatial: (enabled: boolean) => invoke<void>("set_spatial", { enabled }),
   verifyThx: () => invoke<string>("verify_thx")
 };

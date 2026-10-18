@@ -9,6 +9,7 @@
 | 功能 | UI 位置 | 硬件 HID | THX APO | 备注 |
 |---|---|---|---|---|
 | 扬声器 EQ 预设/10 段 | 声音 → 音频均衡器 | ✅ `0x93` + `0x95` | ✅ `SetRenderEQGains` | 两边都写 |
+| 空间音效 / 立体声 | 声音 → 输出模式 | ❌ | ✅ `Get/SetRenderSpatialProcessing` | 与 DRC 独立 |
 | 麦克风 EQ 预设/10 段 | 麦克风 → 麦克风均衡器 | ❌ `0x96` status=5 | ✅ `SetCaptureEQGains` | 无线版不支持 HID 麦克风 EQ |
 | 声音标准化 | 增强 → 声音标准化 | ❌ | ✅ `SetRenderNormalization(Level)` | 即 THX DRC |
 | 低音增强 | 增强 → 低音增强 | ❌ | ✅ `SetRenderBassBoost(Level)` | |

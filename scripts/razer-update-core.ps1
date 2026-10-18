@@ -1,4 +1,4 @@
-# ESPNANYS-REZAR — open-source Razer BlackShark V2 HyperSpeed control app
+﻿# ESPNANYS-REZAR — open-source Razer BlackShark V2 HyperSpeed control app
 # Author: SAIL
 # Copyright (c) 2026 SAIL
 # SPDX-License-Identifier: MIT
@@ -83,8 +83,16 @@ function Invoke-Elevated([string]$Argument) {
     $file = '"' + $PSCommandPath + '"'
     $argList = "-NoProfile -ExecutionPolicy Bypass -NoExit -File $file $Argument"
     Write-Host '需要管理员权限，正在请求提权...' -ForegroundColor Yellow
-    Start-Process -FilePath $ps -Verb RunAs -ArgumentList $argList | Out-Null
-    Write-Host '已打开管理员窗口；请在那里查看结果。' -ForegroundColor Gray
+    try {
+        $process = Start-Process -FilePath $ps -Verb RunAs -ArgumentList $argList -Wait -PassThru
+        if ($null -ne $process) {
+            $script:ExitCode = $process.ExitCode
+        }
+    } catch {
+        $script:ExitCode = 1
+        throw "提权失败或已取消：$($_.Exception.Message)"
+    }
+    Write-Host '管理员窗口已结束。' -ForegroundColor Gray
 }
 
 function Get-HostsLines {
@@ -133,21 +141,28 @@ function Backup-Hosts {
 
 function Set-HostsBlocked([bool]$Blocked) {
     $lines = Get-HostsLines
+    # Only remove SAIL's own marked line. A user's unrelated
+    # app-assets.razer.com mapping must survive -Disable/-Enable.
     $kept = @($lines | Where-Object {
-            $_ -notmatch '(?i)app-assets\.razer\.com' -and
             $_ -notmatch [regex]::Escape($script:Marker)
         })
 
     if ($Blocked) {
         # 去掉文件末尾多余空行，再追加一条
         while ($kept.Count -gt 0 -and [string]::IsNullOrWhiteSpace($kept[$kept.Count - 1])) {
-            $kept = @($kept[0..($kept.Count - 2)])
+            $kept = @($kept | Select-Object -First ($kept.Count - 1))
         }
         $kept += $script:HostLine
     }
 
-    $encoding = New-Object System.Text.ASCIIEncoding
-    [System.IO.File]::WriteAllLines($script:HostsPath, [string[]]$kept, $encoding)
+    # Write a sibling file first, then replace. An interrupted/AV-locked write
+    # must not leave the system hosts file truncated.
+    $temp = "$($script:HostsPath).sail.tmp"
+    # Match Get-Content's default (ANSI on Windows PowerShell 5.1) so existing
+    # localized comments are not turned into mojibake.
+    $encoding = [System.Text.Encoding]::Default
+    [System.IO.File]::WriteAllLines($temp, [string[]]$kept, $encoding)
+    Move-Item -LiteralPath $temp -Destination $script:HostsPath -Force
 }
 
 function Show-Status {

@@ -28,9 +28,20 @@ struct EventState {
 }
 
 static EVENT_STATE: OnceLock<Mutex<EventState>> = OnceLock::new();
+static HID_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 
 fn event_state() -> &'static Mutex<EventState> {
     EVENT_STATE.get_or_init(|| Mutex::new(EventState::default()))
+}
+
+/// Serialize HID use across snapshot reads and setters. The UI polls every
+/// 10 seconds and commands are async, so two handles can otherwise interleave
+/// sequence numbers and steal input reports from each other.
+fn hid_lock() -> std::sync::MutexGuard<'static, ()> {
+    HID_LOCK
+        .get_or_init(|| Mutex::new(()))
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
 /// Remember an async event for later snapshots. Reading the feature-report
@@ -156,6 +167,7 @@ pub struct ThxSnapshot {
     pub installed: bool,
     pub enabled: Option<bool>,
     pub level: Option<i32>,
+    pub spatial_enabled: Option<bool>,
     pub endpoint: Option<String>,
     pub dll: Option<String>,
     pub dll_version: Option<String>,
@@ -169,6 +181,7 @@ impl ThxSnapshot {
             installed: false,
             enabled: None,
             level: None,
+            spatial_enabled: None,
             endpoint: None,
             dll: None,
             dll_version: None,
@@ -209,6 +222,7 @@ pub trait ThxHost {
     fn status(&self) -> Result<ThxSnapshot, String>;
     fn set_level(&self, level: i32) -> Result<(), String>;
     fn set_enabled(&self, enabled: bool) -> Result<(), String>;
+    fn set_spatial(&self, enabled: bool) -> Result<(), String>;
     fn verify(&self) -> Result<String, String>;
 }
 
@@ -267,6 +281,11 @@ impl ThxHost for ProcessThxHost {
             .map(|_| ())
     }
 
+    fn set_spatial(&self, enabled: bool) -> Result<(), String> {
+        self.run(&["spatial", if enabled { "on" } else { "off" }])
+            .map(|_| ())
+    }
+
     fn verify(&self) -> Result<String, String> {
         self.run(&["verify"])
     }
@@ -319,6 +338,7 @@ impl SailApp {
     /// Read every field independently. A single timeout or unsupported command
     /// does not discard the fields that did respond.
     pub fn snapshot(&self) -> DeviceSnapshot {
+        let _guard = hid_lock();
         let transport = match HidTransport::open(None) {
             Ok(transport) => transport,
             Err(error) => return DeviceSnapshot::disconnected(error.to_string()),
@@ -389,6 +409,7 @@ impl SailApp {
     }
 
     pub fn set_sidetone(&self, enabled: bool) -> Result<(), SailError> {
+        let _guard = hid_lock();
         let mut device = sail_hid::open_device(None)?;
         device.set_sidetone(enabled)?;
         Ok(())
@@ -398,6 +419,7 @@ impl SailApp {
         if value > 15 {
             return Err(SailError::Invalid("sidetone-volume is 0..15".into()));
         }
+        let _guard = hid_lock();
         let mut device = sail_hid::open_device(None)?;
         device.set_sidetone_volume(value)?;
         Ok(())
@@ -406,12 +428,17 @@ impl SailApp {
     pub fn set_eq_preset(&self, preset: &str) -> Result<(), SailError> {
         let preset = SpeakerEqPreset::from_name(preset)
             .ok_or_else(|| SailError::Invalid(format!("unknown EQ preset: {preset}")))?;
+        let _guard = hid_lock();
         let mut device = sail_hid::open_device(None)?;
         device.set_speaker_eq_preset(preset)?;
         Ok(())
     }
 
     pub fn set_eq_gains(&self, gains: [i8; 10]) -> Result<(), SailError> {
+        if gains.iter().any(|gain| !(-12..=12).contains(gain)) {
+            return Err(SailError::Invalid("EQ gains must be -12..12".into()));
+        }
+        let _guard = hid_lock();
         let mut device = sail_hid::open_device(None)?;
         device.set_speaker_eq_gains(&gains)?;
         Ok(())
@@ -423,6 +450,10 @@ impl SailApp {
 
     pub fn set_thx_enabled(&self, enabled: bool) -> Result<(), SailError> {
         self.thx.set_enabled(enabled).map_err(SailError::Thx)
+    }
+
+    pub fn set_thx_spatial(&self, enabled: bool) -> Result<(), SailError> {
+        self.thx.set_spatial(enabled).map_err(SailError::Thx)
     }
 
     pub fn verify_thx(&self) -> Result<String, SailError> {
@@ -555,6 +586,9 @@ mod tests {
         fn set_enabled(&self, _enabled: bool) -> Result<(), String> {
             Ok(())
         }
+        fn set_spatial(&self, _enabled: bool) -> Result<(), String> {
+            Ok(())
+        }
         fn verify(&self) -> Result<String, String> {
             Ok("OK".into())
         }
@@ -576,6 +610,7 @@ mod tests {
                 installed: true,
                 enabled: Some(true),
                 level: Some(10),
+                spatial_enabled: Some(true),
                 endpoint: Some("endpoint".into()),
                 dll: None,
                 dll_version: None,

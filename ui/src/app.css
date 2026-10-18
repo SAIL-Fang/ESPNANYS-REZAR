@@ -246,6 +246,26 @@ h3 { margin: 0; font-size: 14px; font-weight: 650; letter-spacing: -0.01em; }
 .eq-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; }
 .eq-head p { margin: 5px 0 0; color: var(--sail-muted); font-size: 11.5px; }
 .eq-head p b { color: var(--sail-ink-2); font-weight: 600; }
+.output-panel { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 13px 18px; margin-bottom: 12px; }
+.output-copy h2 { margin: 2px 0 0; font-size: 14px; letter-spacing: -0.02em; }
+.output-copy p { margin: 4px 0 0; color: var(--sail-muted); font-size: 11px; }
+.output-seg { flex: 0 1 auto; }
+.output-seg button { white-space: nowrap; }
+.output-seg button:last-child { font-size: 10px; letter-spacing: 0.01em; }
+.eq-unknown {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 200px;
+  padding: 22px;
+  border-top: 1px solid var(--sail-line);
+  text-align: center;
+}
+.eq-unknown strong { color: var(--sail-ink-2); font-size: 13px; }
+.eq-unknown p { max-width: 520px; margin: 0 0 5px; color: var(--sail-muted); font-size: 11.5px; line-height: 1.6; }
+.eq-unknown .btn { margin-top: 3px; border-color: var(--sail-line); background: #fff; }
 
 .preset-seg {
   display: flex;

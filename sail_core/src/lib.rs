@@ -280,8 +280,11 @@ pub fn parse_response(frame: &[u8; FRAME_LEN]) -> Result<Option<Response>, Error
         return Ok(None);
     }
     let len = frame[12] as usize;
-    if 13 + len > 63 {
+    if 13 + len > 62 {
         return Err(Error::BadFrame("response data length exceeds frame"));
+    }
+    if checksum(frame) != frame[62] {
+        return Err(Error::BadFrame("response checksum mismatch"));
     }
     Ok(Some(Response {
         sequence: frame[2],
@@ -300,7 +303,7 @@ pub fn parse_event(frame: &[u8; FRAME_LEN]) -> Result<Option<Event>, Error> {
         return Ok(None);
     }
     let len = frame[12] as usize;
-    if 13 + len > 63 {
+    if 13 + len > 62 {
         return Err(Error::BadFrame("event data length exceeds frame"));
     }
     Ok(Some(Event {
@@ -349,18 +352,32 @@ impl<T: Transport> SailDevice<T> {
     }
 
     fn next_sequence(&mut self) -> u8 {
-        self.sequence = self.sequence.wrapping_add(1);
-        if self.sequence == 0 {
-            self.sequence = 1;
+        loop {
+            self.sequence = self.sequence.wrapping_add(1);
+            if self.sequence == 0 {
+                self.sequence = 1;
+            }
+            // 0x41..=0x52 are observed-dead on this device. Never emit them
+            // after the sequence wraps from 0xFF.
+            if !(0x41..=0x52).contains(&self.sequence) {
+                return self.sequence;
+            }
         }
-        self.sequence
     }
 
     /// Send a command and wait for the matching response. Device status is returned
     /// as a `Response` so callers can inspect "not supported" (status 5) explicitly.
     pub fn transact(&mut self, command: Command, payload: &[u8]) -> Result<Response, Error> {
         let sequence = self.next_sequence();
-        let frame = build_request_with_flags(command, sequence, payload, self.get_flags9)?;
+        let flags9 = match command.class() {
+            // DongleLed is the one GET that always wants 0x00; other GETs
+            // use the wired/wireless device policy supplied by the transport.
+            RequestClass::Get if command.flags9() == 0x00 => 0x00,
+            RequestClass::Get => self.get_flags9,
+            // set1/set10 always use 0x80, including on wired 0x056E.
+            RequestClass::Set1 | RequestClass::Set10 => 0x80,
+        };
+        let frame = build_request_with_flags(command, sequence, payload, flags9)?;
         self.transport.send(&frame)?;
         let deadline = Instant::now() + self.timeout;
         loop {
@@ -600,6 +617,58 @@ mod tests {
         fn recv(&mut self, _timeout: Duration) -> Result<Option<[u8; 64]>, Error> {
             Ok(self.responses.pop_front())
         }
+    }
+
+    #[test]
+    fn rejects_corrupt_response_checksum() {
+        let mut frame = response_frame(0x61, 0x21, 1, &[39]);
+        frame[13] ^= 1;
+        assert!(parse_response(&frame).is_err());
+    }
+
+    #[test]
+    fn rejects_response_data_that_reaches_checksum_byte() {
+        let mut frame = response_frame(0x61, 0x21, 1, &[39]);
+        frame[12] = 50;
+        assert!(parse_response(&frame).is_err());
+    }
+
+    #[test]
+    fn sequence_wrap_skips_dead_range() {
+        let mut device = SailDevice::new(MockTransport::new(Vec::new()));
+        device.sequence = 0x40;
+        assert_eq!(device.next_sequence(), 0x53);
+        device.sequence = 0xFF;
+        assert_eq!(device.next_sequence(), 0x01);
+    }
+
+    #[test]
+    fn dongle_led_get_uses_zero_flag_on_wireless() {
+        let responses = vec![
+            response_frame(0x61, 0x21, 1, &[50]),
+            response_frame(0x62, 0x66, 1, &[2]),
+        ];
+        let mut device = SailDevice::new(MockTransport::new(responses));
+        device.get(Command::Battery).unwrap();
+        device.get(Command::DongleLed).unwrap();
+        let sent = device.into_inner().sent;
+        assert_eq!(sent[0][9], 0x80);
+        assert_eq!(sent[1][9], 0x00);
+    }
+
+    #[test]
+    fn wired_get_and_set_use_expected_flags() {
+        let responses = vec![
+            response_frame(0x61, 0x21, 1, &[50]),
+            response_frame(0x62, 0x98, 1, &[1]),
+        ];
+        let mut device = SailDevice::new(MockTransport::new(responses)).with_get_flags(0x00);
+        device.get(Command::Battery).unwrap();
+        device.set_sidetone(true).unwrap();
+        let sent = device.into_inner().sent;
+        assert_eq!(sent[0][9], 0x00, "wired get");
+        assert_eq!(sent[1][9], 0x80, "wired set1");
+        assert_eq!(sent[1][6], 0x05, "set1 class");
     }
 
     #[test]

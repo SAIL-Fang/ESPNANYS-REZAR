@@ -93,7 +93,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\razer-update-core.ps1 -Status
 ESPNANYS-REZAR is an independent, open-source **Razer headset driver alternative** for the Razer BlackShark V2 HyperSpeed (wireless `1532:0565`, wired `1532:056E`). It was started after a **Razer Synapse 4 background auto-update knocked the headset driver out**: the device disappeared from Windows audio and games, and recovering it took far too long. ESPNANYS-REZAR exists so the headset can be controlled — and kept stable — without depending on Synapse.
 
 - Native HID control: battery, charging, firmware, serial, sidetone, EQ, device flags.
-- Optional THX APO reuse: sound normalization and THX processing via the copy already installed on your PC.
+- Optional THX APO reuse: sound normalization, stereo/spatial toggle, and THX processing via the copy already installed on your PC.
 - A Tauri 2 + Svelte 5 desktop UI with a directly draggable EQ curve and per-band dB input.
 - A reversible **disable Razer Synapse 4 / driver auto-updates** switch.
 - No Razer or THX binaries are bundled or redistributed.
@@ -137,12 +137,12 @@ Razer headset driver · Razer headset driver alternative · disable Razer Synaps
 
 | 模块 | 状态 | 说明 |
 |---|---|---|
-| `sail_core` | ✅ | 64 字节帧、seq、checksum、命令/响应/事件；8 个 mock 测试 |
+| `sail_core` | ✅ | 64 字节帧、seq、checksum、命令/响应/事件；13 个 mock 测试 |
 | `sail_hid` | ✅ 实测 | `hidapi` 枚举 0xFF14、真实电量/固件/序列号 |
 | `sail_app` | ✅ | 应用编排、`Field` 部分成功快照、THX host 接缝；CLI/UI 共用 |
 | `sail_cli` | ✅ 实测 | `status` / `battery` / `sidetone` / `eq-preset` / `eq-gains` |
 | `sail_thx_bridge` | ✅ 实测 | 加载已安装 THX DLL；`verify`：写 1 → 回读 1 → 恢复 10 |
-| `sail_ui` | ✅ 首版 | Tauri 2 + Svelte 5；可直接拖曲线 / 输入 dB 的均衡器、声音标准化 1–100 |
+| `sail_ui` | ✅ 首版 | Tauri 2 + Svelte 5；可直接拖曲线 / 输入 dB 的均衡器、声音标准化 1–100、立体声 / THX 空间音效切换 |
 | 麦克风 THX 参数 | ⏳ | 噪声门/降噪/标准化/亮丽人声/麦克风 EQ 下一阶段 |
 | 托盘/配置/开机启动 | ⏳ | 下一阶段 |
 

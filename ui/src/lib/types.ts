@@ -30,6 +30,7 @@ export type ThxSnapshot = {
   installed: boolean;
   enabled: boolean | null;
   level: number | null;
+  spatialEnabled: boolean | null;
   endpoint: string | null;
   dll: string | null;
   dllVersion: string | null;

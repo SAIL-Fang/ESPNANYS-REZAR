@@ -66,7 +66,7 @@
 
   <p class="muted" style="margin-top:8px;font-size:10.5px">
     {#if available}
-      THX 已连接，SAIL 直接写入 1–100。
+      THX 已连接，直接写入 1–100。
     {:else}
       未检测到 THX；均衡器仍可用。
     {/if}

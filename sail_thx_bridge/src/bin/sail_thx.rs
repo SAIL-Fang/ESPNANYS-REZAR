@@ -28,7 +28,23 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     // Reading must not change user state: THX only accepts level writes after
     // normalization has been enabled, so the write commands use the activating
     // constructor and everything that only reports state stays passive.
-    let passive = matches!(command, "status" | "probe");
+    let passive = matches!(command, "status" | "probe" | "spatial");
+    if command == "verify" {
+        // Sample the real user state with a passive bridge first. The active
+        // constructor enables normalization, so sampling through it can never
+        // observe "off".
+        let observed = match &dll {
+            Some(path) => ThxBridge::with_dll_passive(path)?,
+            None => ThxBridge::open_passive()?,
+        }
+        .status()?;
+        let bridge = match &dll {
+            Some(path) => ThxBridge::with_dll(path)?,
+            None => ThxBridge::open()?,
+        };
+        verify(&bridge, observed.enabled, observed.level)?;
+        return Ok(());
+    }
     let bridge = match (dll, passive) {
         (Some(path), true) => ThxBridge::with_dll_passive(path)?,
         (Some(path), false) => ThxBridge::with_dll(path)?,
@@ -65,7 +81,22 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                 println!("{}", bridge.get_level()?);
             }
         },
-        "verify" => verify(&bridge)?,
+        "spatial" => match args.get(1) {
+            Some(value) => {
+                let enabled = match value.as_str() {
+                    "on" => true,
+                    "off" => false,
+                    _ => return Err("spatial needs on|off".into()),
+                };
+                bridge.set_spatial(enabled)?;
+                println!(
+                    "spatial {}, readback {}",
+                    if enabled { "on" } else { "off" },
+                    if bridge.get_spatial()? { "on" } else { "off" }
+                );
+            }
+            None => println!("{}", if bridge.get_spatial()? { "on" } else { "off" }),
+        },
         other => return Err(format!("unknown command: {other}").into()),
     }
     Ok(())
@@ -84,6 +115,7 @@ fn print_json(status: &ThxStatus) -> Result<(), Box<dyn std::error::Error>> {
         "installed": true,
         "enabled": status.enabled,
         "level": status.level,
+        "spatialEnabled": status.spatial_enabled,
         "endpoint": status.endpoint,
         "dll": status.dll.display().to_string(),
         "dllVersion": dll_version,
@@ -100,10 +132,20 @@ fn print_json(status: &ThxStatus) -> Result<(), Box<dyn std::error::Error>> {
 /// present before. The probe differs from the current level because THX
 /// reports failure when asked to apply the value it already holds, and the
 /// restore always runs, including after a failed probe.
-fn verify(bridge: &ThxBridge) -> Result<(), ThxError> {
-    let before = bridge.get_level()?;
-    let before_enabled = bridge.get_enabled().unwrap_or(true);
-    println!("before: {before} (enabled: {before_enabled})");
+fn verify(
+    bridge: &ThxBridge,
+    before_enabled: Option<bool>,
+    before_level: Option<i32>,
+) -> Result<(), ThxError> {
+    let before = match before_level {
+        Some(level) if (1..=100).contains(&level) => level,
+        _ => {
+            return Err(ThxError::Status(
+                "cannot verify: current normalization level is unavailable".into(),
+            ))
+        }
+    };
+    println!("before: {before} (enabled: {before_enabled:?})");
 
     let probe = if before == 1 { 2 } else { 1 };
     let mut failure: Option<ThxError> = None;
@@ -124,28 +166,23 @@ fn verify(bridge: &ThxBridge) -> Result<(), ThxError> {
     }
 
     // Restore the previous value even if the probe failed.
-    let restore = if (1..=100).contains(&before) {
-        before
-    } else {
-        10
-    };
-    bridge.set_level(restore)?;
+    bridge.set_level(before)?;
     let after = bridge.get_level()?;
-    println!("restored {restore} -> readback {after}");
-    if after != restore {
+    println!("restored {before} -> readback {after}");
+    if after != before {
         return Err(ThxError::Status(format!(
-            "expected restore {restore}, got {after}"
+            "expected restore {before}, got {after}"
         )));
     }
-    if !before_enabled {
-        // The probe needs normalization enabled to accept a level write.
+    if before_enabled == Some(false) {
+        // The active constructor had to enable normalization for the probe.
         // Put the user's off state back after restoring the level.
-        let _ = bridge.set_enabled(false);
+        bridge.set_enabled(false)?;
     }
 
     if let Some(error) = failure {
         return Err(error);
     }
-    println!("OK: THX accepts normalization level {probe} and restores {restore}");
+    println!("OK: THX accepts normalization level {probe} and restores {before}");
     Ok(())
 }

@@ -11,23 +11,16 @@
   import EqEditor from "$lib/components/EqEditor.svelte";
   import NormalizationPanel from "$lib/components/NormalizationPanel.svelte";
 
-  let eqPreset = $state("game");
-  let gains = $state<number[]>([]);
+  let eqPreset = $state<string | null>(null);
+  let gains = $state<number[] | null>(null);
   let level = $state(10);
   let normalizationOn = $state(false);
   let synced = $state(false);
-  let presetsReady = $state(false);
 
   let available = $derived(!!device.thx?.installed);
+  let spatial = $derived(device.thx?.spatialEnabled ?? null);
+  let spatialBusy = $derived(device.busy || !available || spatial === null);
   let battery = $derived(known(device.status?.battery, 0));
-
-  $effect(() => {
-    if (!presetsReady && device.presets.length > 0) {
-      eqPreset = device.presets[0].id;
-      gains = [...device.presets[0].gains];
-      presetsReady = true;
-    }
-  });
 
   $effect(() => {
     if (!synced && device.thx) {
@@ -37,17 +30,28 @@
     }
   });
 
-  function selectPreset(id: string) {
+  async function selectPreset(id: string) {
     const preset = device.presets.find((item) => item.id === id);
     if (!preset) return;
+    // Do not show a curve until the device accepted the preset. Otherwise a
+    // failed write would leave a convincing but false UI state.
+    const ok = await device.setEqPreset(id, preset.label);
+    if (!ok) return;
     eqPreset = id;
     gains = [...preset.gains];
-    void device.setEqPreset(id, preset.label);
+  }
+
+  function startFlat() {
+    eqPreset = "custom";
+    gains = Array.from({ length: 10 }, () => 0);
   }
 
   function updateGain(index: number, value: number) {
+    if (!Number.isFinite(value)) return;
     eqPreset = "custom";
-    gains = gains.map((gain, slot) => (slot === index ? value : gain));
+    gains = (gains ?? Array.from({ length: 10 }, () => 0)).map((gain, slot) =>
+      slot === index ? value : gain
+    );
   }
 
   function resetGains() {
@@ -56,11 +60,16 @@
   }
 
   async function applyGains() {
-    await device.setEqGains(gains);
+    if (gains) await device.setEqGains(gains);
   }
 
   async function saveNormalization() {
     await device.saveNormalization(level);
+  }
+
+  async function chooseSpatial(enabled: boolean) {
+    if (spatialBusy) return;
+    await device.setSpatial(enabled);
   }
 
   async function toggleNormalization() {
@@ -78,6 +87,30 @@
     {available ? `THX ${device.thx?.level ?? "—"}` : "THX 未安装"}
   </span>
 </div>
+
+<section class="panel output-panel" aria-labelledby="output-title">
+  <div class="output-copy">
+    <div class="eyebrow">输出模式</div>
+    <h2 id="output-title">立体声 / THX 空间音效</h2>
+    <p>空间音效由 THX APO 处理，和声音标准化相互独立。</p>
+  </div>
+  <div class="preset-seg output-seg" role="group" aria-label="输出模式">
+    <button
+      type="button"
+      class:on={spatial === false}
+      disabled={spatialBusy}
+      aria-pressed={spatial === false}
+      onclick={() => chooseSpatial(false)}
+    >立体声</button>
+    <button
+      type="button"
+      class:on={spatial === true}
+      disabled={spatialBusy}
+      aria-pressed={spatial === true}
+      onclick={() => chooseSpatial(true)}
+    >THX SPATIAL AUDIO 空间音效</button>
+  </div>
+</section>
 
 <section class="panel eq-panel" aria-labelledby="eq-title">
   <div class="eq-head">
@@ -99,7 +132,7 @@
     </div>
   </div>
 
-  {#if gains.length === 10}
+  {#if gains !== null && gains.length === 10}
     <EqEditor
       {gains}
       {frequencies}
@@ -109,7 +142,11 @@
       onreset={resetGains}
     />
   {:else}
-    <p class="muted">加载均衡器预设…</p>
+    <div class="eq-unknown">
+      <strong>当前均衡器曲线未知</strong>
+      <p>耳机没有返回当前 10 段增益。选择一个预设，或从平直曲线开始；这样不会在写入时覆盖未知的其余频段。</p>
+      <button class="btn" type="button" onclick={startFlat} disabled={device.busy}>从平直曲线开始</button>
+    </div>
   {/if}
 
   <p class="inline-status">{device.notice}</p>

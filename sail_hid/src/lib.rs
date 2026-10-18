@@ -36,30 +36,48 @@ pub struct HidTransport {
     info: HidInfo,
 }
 
+fn select_device(
+    devices: Vec<HidInfo>,
+    wanted: Option<u16>,
+    allow_any_usage: bool,
+) -> Option<HidInfo> {
+    let mut candidates: Vec<HidInfo> = devices
+        .into_iter()
+        .filter(|device| {
+            device.vendor_id == RAZER_VID
+                && matches!(device.product_id, PID_WIRELESS | PID_WIRED)
+                && wanted.map_or(true, |pid| device.product_id == pid)
+                && (allow_any_usage
+                    || (device.usage_page == VENDOR_USAGE_PAGE && device.usage == VENDOR_USAGE))
+        })
+        .collect();
+    // Prefer the vendor control interface (3), then the wireless receiver.
+    candidates.sort_by_key(|device| {
+        let interface_rank = if device.interface_number == 3 { 0 } else { 1 };
+        let pid_rank = if device.product_id == PID_WIRELESS {
+            0
+        } else {
+            1
+        };
+        (interface_rank, pid_rank)
+    });
+    candidates.into_iter().next()
+}
+
 impl HidTransport {
-    /// Enumerate Razer vendor HID interfaces and open the first matching device.
-    /// Prefers the wireless PID unless one is supplied.
+    /// Enumerate Razer vendor HID interfaces and open the best matching device.
+    /// When no PID is supplied, the 2.4G receiver is preferred over wired.
     pub fn open(pid: Option<u16>) -> Result<Self, Error> {
-        let devices = enumerate()?;
         let wanted = pid;
-        let info = devices
-            .into_iter()
-            .find(|d| {
-                d.usage_page == VENDOR_USAGE_PAGE
-                    && d.usage == VENDOR_USAGE
-                    && wanted.map_or(true, |p| d.product_id == p)
-            })
+        let info = select_device(enumerate()?, wanted, false)
             .or_else(|| {
-                let all = enumerate().ok()?;
-                all.into_iter().find(|d| {
-                    d.vendor_id == RAZER_VID
-                        && matches!(d.product_id, PID_WIRELESS | PID_WIRED)
-                        && wanted.map_or(true, |p| d.product_id == p)
-                })
+                enumerate()
+                    .ok()
+                    .and_then(|all| select_device(all, wanted, true))
             })
             .ok_or_else(|| {
                 Error::Unsupported(format!(
-                    "no Razer vendor HID interface found (VID 0x{RAZER_VID:04X}, PID {:?})",
+                    "no Razer headset HID interface found (VID 0x{RAZER_VID:04X}, PID {:?})",
                     wanted
                 ))
             })?;
@@ -88,6 +106,9 @@ impl HidTransport {
     /// event (battery or charging) in feature report 2; this is a read-only
     /// observation and does not disturb the event stream.
     pub fn read_feature_report(&self, report_id: u8, len: usize) -> Result<Vec<u8>, Error> {
+        if len == 0 {
+            return Err(Error::Io("feature report buffer is empty".into()));
+        }
         let mut buffer = vec![0u8; len];
         buffer[0] = report_id;
         let read = self
@@ -122,6 +143,10 @@ impl Transport for HidTransport {
             .map_err(|e| Error::Io(format!("HID read: {e}")))?;
         if read == 0 {
             Ok(None)
+        } else if read != FRAME_LEN {
+            Err(Error::Io(format!(
+                "short HID read: {read} of {FRAME_LEN} bytes"
+            )))
         } else {
             Ok(Some(buf))
         }
@@ -162,6 +187,50 @@ pub fn enumerate() -> Result<Vec<HidInfo>, Error> {
 mod tests {
     use super::*;
     use sail_core::Command;
+
+    fn info(product_id: u16, interface_number: i32, usage_page: u16) -> HidInfo {
+        HidInfo {
+            path: format!("test-{product_id}-{interface_number}-{usage_page}"),
+            product: Some("test".into()),
+            vendor_id: RAZER_VID,
+            product_id,
+            usage_page,
+            usage: 1,
+            interface_number,
+        }
+    }
+
+    #[test]
+    fn select_device_rejects_vendor_decoy() {
+        let devices = vec![
+            info(0x0F00, 3, VENDOR_USAGE_PAGE),
+            info(PID_WIRELESS, 3, VENDOR_USAGE_PAGE),
+        ];
+        let selected = select_device(devices, None, false).expect("no selection");
+        assert_eq!(selected.product_id, PID_WIRELESS);
+    }
+
+    #[test]
+    fn select_device_prefers_interface_three_then_wireless() {
+        let devices = vec![
+            info(PID_WIRELESS, 4, VENDOR_USAGE_PAGE),
+            info(PID_WIRED, 3, VENDOR_USAGE_PAGE),
+            info(PID_WIRELESS, 3, VENDOR_USAGE_PAGE),
+        ];
+        let selected = select_device(devices, None, false).expect("no selection");
+        assert_eq!(selected.product_id, PID_WIRELESS);
+        assert_eq!(selected.interface_number, 3);
+    }
+
+    #[test]
+    fn select_device_respects_requested_pid() {
+        let devices = vec![
+            info(PID_WIRELESS, 3, VENDOR_USAGE_PAGE),
+            info(PID_WIRED, 3, VENDOR_USAGE_PAGE),
+        ];
+        let selected = select_device(devices, Some(PID_WIRED), false).expect("no selection");
+        assert_eq!(selected.product_id, PID_WIRED);
+    }
 
     #[test]
     #[ignore = "requires the physical headset"]

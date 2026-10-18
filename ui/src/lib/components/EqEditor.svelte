@@ -19,6 +19,60 @@
   let active = $state(3);
   let graphEl: HTMLDivElement;
   let dragIndex = $state<number | null>(null);
+  let editing = $state<number | null>(null);
+  let drafts = $state<string[]>([]);
+
+  $effect(() => {
+    // Keep non-focused fields in sync with drag/preset changes. While editing,
+    // preserve the raw string so "-" and a trailing decimal can be typed.
+    if (editing === null) {
+      drafts = gains.map(formatGain);
+    }
+  });
+
+  function formatGain(gain: number): string {
+    return gain > 0 ? `+${gain}` : `${gain}`;
+  }
+
+  function beginEdit(index: number) {
+    active = index;
+    editing = index;
+    drafts[index] = formatGain(gains[index] ?? 0);
+  }
+
+  function updateDraft(index: number, raw: string) {
+    drafts[index] = raw;
+    if (raw.trim() === "") return;
+    const value = Number(raw);
+    if (Number.isFinite(value)) oninput(index, clamp(value));
+  }
+
+  function commitDraft(index: number) {
+    const raw = drafts[index] ?? "";
+    editing = null;
+    if (raw.trim() === "") {
+      drafts[index] = formatGain(gains[index] ?? 0);
+      return;
+    }
+    const value = Number(raw);
+    if (Number.isFinite(value)) {
+      oninput(index, clamp(value));
+    } else {
+      drafts[index] = formatGain(gains[index] ?? 0);
+    }
+  }
+
+  function onKeydown(event: KeyboardEvent, index: number) {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      commitDraft(index);
+      if (!busy) onapply();
+    } else if (event.key === "Escape") {
+      event.preventDefault();
+      editing = null;
+      drafts[index] = formatGain(gains[index] ?? 0);
+    }
+  }
 
   let points = $derived(
     gains
@@ -105,13 +159,6 @@
       step(index, event.key === "ArrowUp" ? 1 : -1);
     }
   }
-
-  function onKeydown(event: KeyboardEvent) {
-    if (event.key === "Enter") {
-      event.preventDefault();
-      onapply();
-    }
-  }
 </script>
 
 <div
@@ -185,15 +232,15 @@
       <div class="gain-control">
         <button type="button" aria-label={`${frequency} Hz 减 1 dB`} onclick={() => step(index, -1)}>−</button>
         <input
-          type="number"
-          min="-12"
-          max="12"
-          step="1"
-          value={gains[index]}
+          type="text"
+          inputmode="decimal"
+          autocomplete="off"
+          value={drafts[index] ?? formatGain(gains[index] ?? 0)}
           aria-label={`${frequency} Hz 增益`}
-          onfocus={() => (active = index)}
-          oninput={(event) => setGain(index, event.currentTarget.value)}
-          onkeydown={onKeydown}
+          onfocus={() => beginEdit(index)}
+          oninput={(event) => updateDraft(index, event.currentTarget.value)}
+          onblur={() => commitDraft(index)}
+          onkeydown={(event) => onKeydown(event, index)}
         />
         <button type="button" aria-label={`${frequency} Hz 加 1 dB`} onclick={() => step(index, 1)}>+</button>
       </div>
