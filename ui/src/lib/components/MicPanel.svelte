@@ -149,9 +149,16 @@
   }
 
   async function togglePreview() {
-    const next = !preview;
-    if (await device.micCommand(["mic-preview", next ? "on" : "off"], next ? "麦克风测试中" : "麦克风测试已停止")) {
-      preview = next;
+    if (preview) {
+      if (await device.micCommand(["mic-preview", "off"], "麦克风测试已停止")) {
+        preview = false;
+      }
+      return;
+    }
+    // Preview owns a DLL worker thread. Keep it in a detached helper process
+    // instead of a request/response helper, which would crash during unload.
+    if (await device.startMicPreview("麦克风测试中")) {
+      preview = true;
     }
   }
 

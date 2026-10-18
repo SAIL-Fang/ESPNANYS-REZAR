@@ -152,7 +152,9 @@ UI：增强 → 麦克风降噪，默认开启，滑杆 60。
 结束: SetCapturePreview(containerId, false)
 ```
 
-按钮激活时变橙色；关闭后恢复。
+- 必须在一个**常驻 helper 进程**里调用 `SetCapturePreview(true)`。短命进程启动 preview 后立即卸载 DLL 会触发 `0xC0000005`（音频实际上已启动，但 UI 会看到空错误且没有停止按钮）。
+- 本项目用 `sail_thx mic-preview-hold` 持有 preview，另一个 `sail_thx mic-preview off` 负责停止；hold 进程检测到 preview=false 后退出。
+- 按钮激活时变为「停止测试」；关闭后恢复「开始测试」。
 
 ### 4.7 麦克风监听（侧音）
 

@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: MIT
 use sail_thx_bridge::{print_status, ThxBridge, ThxError, ThxStatus};
 use std::env;
+use std::process::{Command, Stdio};
 
 fn main() {
     if let Err(error) = run() {
@@ -42,6 +43,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             | "mic-eq-toggle"
             | "mic-volume"
             | "mic-preview"
+            | "mic-preview-hold"
             | "mic-sidetone"
     );
     if command == "verify" {
@@ -176,8 +178,45 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         }
         "mic-preview" => {
             let enabled = parse_on_off(args.get(1).ok_or("mic-preview needs on|off")?)?;
-            bridge.set_capture_preview(enabled)?;
-            println!("mic-preview {}", if enabled { "on" } else { "off" });
+            if enabled {
+                // Starting preview in this short-lived helper would unload the
+                // DLL while THX's preview worker is still running (0xC0000005).
+                // Spawn the persistent holder and let it own the preview.
+                let exe = env::current_exe()?;
+                let mut command = Command::new(exe);
+                command
+                    .arg("mic-preview-hold")
+                    .stdin(Stdio::null())
+                    .stdout(Stdio::null())
+                    .stderr(Stdio::null());
+                #[cfg(windows)]
+                {
+                    use std::os::windows::process::CommandExt;
+                    command.creation_flags(0x0800_0000);
+                }
+                command.spawn()?;
+                println!("mic-preview on");
+            } else {
+                bridge.set_capture_preview(false)?;
+                println!("mic-preview off");
+            }
+        }
+        "mic-preview-hold" => {
+            bridge.set_capture_preview(true)?;
+            println!("mic-preview started");
+            // The DLL's preview starts a worker thread. An ephemeral helper
+            // must stay alive while that thread runs; unloading the DLL right
+            // after SetCapturePreview(true) raises 0xC0000005 at exit. Keep
+            // the process alive until a separate `mic-preview off` flips the
+            // state (or a bounded timeout expires).
+            for _ in 0..1200 {
+                std::thread::sleep(std::time::Duration::from_millis(500));
+                if !bridge.get_capture_preview().unwrap_or(false) {
+                    break;
+                }
+            }
+            let _ = bridge.set_capture_preview(false);
+            println!("mic-preview stopped");
         }
         "mic-sidetone" => {
             let enabled = parse_on_off(args.get(1).ok_or("mic-sidetone needs on|off")?)?;

@@ -498,6 +498,8 @@ sail_cli mic-preview on|off
 sail_cli mic-sidetone on|off
 ```
 
+> 麦克风测试会启动一个常驻的 `sail_thx mic-preview-hold` helper，避免短命 helper 在 DLL 卸载时崩溃（0xC0000005）；按钮会显示「停止测试」，停止时写 `mic-preview off`。
+
 完整参数、预设数组和实测序列见 [docs/audio-features.md](docs/audio-features.md)，机器可读版见 [captures/audio-features.json](captures/audio-features.json)。
 
 ## 已知问题 / 未完成

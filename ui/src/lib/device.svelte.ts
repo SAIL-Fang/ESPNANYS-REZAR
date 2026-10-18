@@ -126,6 +126,10 @@ export class DeviceStore {
     return this.run(() => api.micCommand(args), notice);
   }
 
+  async startMicPreview(notice: string) {
+    return this.run(() => api.startMicPreview(), notice);
+  }
+
   async setEqPreset(preset: string, label: string) {
     return this.run(() => api.setEqPreset(preset), `${label} 预设已写入`);
   }

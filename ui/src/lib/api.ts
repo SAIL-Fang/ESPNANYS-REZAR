@@ -13,6 +13,7 @@ export const api = {
   setSidetone: (enabled: boolean) => invoke<void>("set_sidetone", { enabled }),
   setSidetoneVolume: (value: number) => invoke<void>("set_sidetone_volume", { value }),
   micCommand: (args: string[]) => invoke<void>("mic_command", { args }),
+  startMicPreview: () => invoke<void>("start_mic_preview"),
   setEqPreset: (preset: string) => invoke<void>("set_eq_preset", { preset }),
   setEqGains: (gains: number[]) => invoke<void>("set_eq_gains", { gains }),
   getThxStatus: () => invoke<ThxSnapshot>("get_thx_status"),

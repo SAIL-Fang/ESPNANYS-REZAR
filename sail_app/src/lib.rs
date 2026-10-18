@@ -253,6 +253,7 @@ pub trait ThxHost {
     fn set_enabled(&self, enabled: bool) -> Result<(), String>;
     fn set_spatial(&self, enabled: bool) -> Result<(), String>;
     fn mic(&self, args: &[String]) -> Result<(), String>;
+    fn start_preview(&self) -> Result<(), String>;
     fn verify(&self) -> Result<String, String>;
 }
 
@@ -301,7 +302,15 @@ impl ProcessThxHost {
                             .map_err(|error| format!("read THX stderr: {error}"))?;
                     }
                     if !status.success() {
-                        return Err(format!("THX helper failed: {}", stderr.trim()));
+                        let detail = stderr.trim();
+                        return Err(if detail.is_empty() {
+                            format!("THX helper failed with exit code {:?}", status.code())
+                        } else {
+                            format!(
+                                "THX helper failed with exit code {:?}: {detail}",
+                                status.code()
+                            )
+                        });
                     }
                     return Ok(stdout);
                 }
@@ -354,6 +363,24 @@ impl ThxHost for ProcessThxHost {
 
     fn mic(&self, args: &[String]) -> Result<(), String> {
         self.run_mic(args)
+    }
+
+    fn start_preview(&self) -> Result<(), String> {
+        let helper = self
+            .helper
+            .as_ref()
+            .ok_or_else(|| "THX helper not found; run scripts\\build.cmd -Stage".to_string())?;
+        // Keep this process alive while THX's preview worker runs. An
+        // ephemeral helper crashes in the DLL at exit (0xC0000005) right after
+        // SetCapturePreview(true), even though the preview itself started.
+        command_for(helper)
+            .args(["mic-preview-hold"])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .map(|_| ())
+            .map_err(|error| format!("start THX preview: {error}"))
     }
 
     fn verify(&self) -> Result<String, String> {
@@ -548,6 +575,10 @@ impl SailApp {
     pub fn mic_command(&self, args: &[String]) -> Result<(), SailError> {
         self.thx.mic(args).map_err(SailError::Thx)
     }
+
+    pub fn start_mic_preview(&self) -> Result<(), SailError> {
+        self.thx.start_preview().map_err(SailError::Thx)
+    }
 }
 
 fn cached_event(transport: &HidTransport) -> Option<Event> {
@@ -679,6 +710,9 @@ mod tests {
             Ok(())
         }
         fn mic(&self, _args: &[String]) -> Result<(), String> {
+            Ok(())
+        }
+        fn start_preview(&self) -> Result<(), String> {
             Ok(())
         }
         fn verify(&self) -> Result<String, String> {

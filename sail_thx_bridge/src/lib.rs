@@ -583,6 +583,10 @@ impl ThxBridge {
         self.capture_set_bool(b"SetCapturePreview\0", b"GetCapturePreview\0", enabled)
     }
 
+    pub fn get_capture_preview(&self) -> Result<bool, ThxError> {
+        self.capture_bool(b"GetCapturePreview\0")
+    }
+
     pub fn set_capture_sidetone(&self, enabled: bool) -> Result<(), ThxError> {
         self.ensure_capture_device()?;
         // `Get/SetStartCaptureStatus` controls the THX capture chain, while
