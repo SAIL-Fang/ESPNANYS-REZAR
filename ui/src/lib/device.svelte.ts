@@ -112,6 +112,45 @@ export class DeviceStore {
     }
   }
 
+  async setDefaultAudioOutput(deviceId?: string): Promise<boolean> {
+    this.error = "";
+    try {
+      await api.setDefaultAudioOutput(deviceId);
+      // The switch itself is confirmed by the backend. Reflect it immediately
+      // so the blocking modal can close; a full HID refresh can take seconds.
+      const target = this.status?.audioOutput?.endpoints.find(
+        (endpoint) => endpoint.id === deviceId
+      );
+      if (this.status && target) {
+        this.status = {
+          ...this.status,
+          audioOutput: {
+            ...this.status.audioOutput,
+            name: target.name,
+            isHeadset: target.isHeadset
+          }
+        };
+      }
+      void this.refresh();
+      return true;
+    } catch (error) {
+      this.error = `无法切换默认输出：${errorText(error)}`;
+      return false;
+    }
+  }
+
+  async openSoundSettings() {
+    try {
+      await api.openSoundSettings();
+    } catch (error) {
+      this.error = `无法打开声音设置：${errorText(error)}`;
+    }
+  }
+
+  async quit() {
+    await api.quitApp();
+  }
+
   async verifyThx() {
     this.pending += 1;
     this.busy = true;

@@ -3,6 +3,7 @@
 // Copyright (c) 2026 SAIL
 // SPDX-License-Identifier: MIT
 use sail_app::{DeviceSnapshot, EqPreset, SailApp, ThxSnapshot};
+use std::process::Command as ProcessCommand;
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{Manager, WindowEvent};
@@ -116,6 +117,30 @@ async fn verify_thx() -> Result<String, String> {
     blocking(|| app().verify_thx().map_err(|error| error.to_string())).await
 }
 
+#[tauri::command]
+async fn set_default_audio_output(device_id: Option<String>) -> Result<(), String> {
+    blocking(move || {
+        app()
+            .set_default_audio_output(device_id.as_deref())
+            .map_err(|error| error.to_string())
+    })
+    .await
+}
+
+#[tauri::command]
+async fn open_sound_settings() -> Result<(), String> {
+    ProcessCommand::new("cmd")
+        .args(["/C", "start", "", "ms-settings:sound"])
+        .spawn()
+        .map(|_| ())
+        .map_err(|error| format!("open sound settings: {error}"))
+}
+
+#[tauri::command]
+fn quit_app(app: tauri::AppHandle) {
+    app.exit(0);
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -168,7 +193,10 @@ pub fn run() {
             set_normalization,
             set_normalization_enabled,
             set_spatial,
-            verify_thx
+            verify_thx,
+            set_default_audio_output,
+            open_sound_settings,
+            quit_app
         ])
         .run(tauri::generate_context!())
         .expect("error while running SAIL");

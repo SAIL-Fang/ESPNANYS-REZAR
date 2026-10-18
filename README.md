@@ -130,7 +130,9 @@ scripts\run-ui.cmd                # run the Tauri app from a short path
 
 THX is optional. If it is installed, ESPNANYS-REZAR can reuse it; if not, HID features still work.
 
-> Default-output guard: if Windows is using speakers instead of the BlackShark, the UI shows a warning and disables THX controls (HID controls stay usable). Close the window to keep the app in the tray; use the tray menu to show or quit.
+> Default-output guard: if Windows is using speakers instead of the BlackShark, the UI blocks with a modal and offers a one-click **设为默认** switch plus an output-device selector. This uses the user-mode Core Audio `IPolicyConfig` API, not a kernel driver. The same switch is available as `sail_cli audio-default [endpoint-id]`.
+>
+> Tray resident by default: closing the window hides it; the tray menu has Show / Quit.
 
 ### Search terms
 
@@ -168,11 +170,20 @@ ui/src/lib         api.ts / device.svelte.ts / components/
 
 ![ESPNANYS-REZAR 声音页](captures/screenshots/sail-ui.png)
 
+![默认输出阻断与切换](captures/screenshots/sail-route-gate.png)
+
 ![ESPNANYS-REZAR 演示页](captures/screenshots/sail-demo.png)
 
 > 演示页的雷达动画和试听音频都是本项目独立实现的：SVG + Web Audio 实时合成，不包含雷蛇/THX 的视频或音频素材。
 >
 > 演示的立体声/空间音效是本地试听，不写入系统状态；“声音”页的开关才改变耳机输出模式。演示页会尝试列出输出设备，可手动指到 Razer 耳机。
+
+### 默认输出与驱动边界
+
+- 默认输出切换使用 Windows Core Audio 的 `IPolicyConfig`（用户态 COM），不需要写内核驱动，也不需要管理员权限。
+- 麦克风默认输入设备同样可以通过 Core Audio 切换；麦克风 THX 效果仍由已安装的 THX APO 处理。
+- 只有要创建虚拟声卡、替换音频 APO 链路、做内核级 HID filter 时，才需要进入驱动/APO 开发；当前这个上位机不需要。
+- 默认输出不是 Razer 耳机时，应用会用阻断式弹窗要求切换；也可以直接运行 `sail_cli audio-default [endpoint-id]`。
 
 ### 构建 / 运行
 

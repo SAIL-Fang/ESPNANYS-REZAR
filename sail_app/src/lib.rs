@@ -9,8 +9,9 @@
 //! optional THX helper. `sail_core` stays protocol-only and `sail_hid` stays a
 //! transport adapter; the CLI and Tauri are both thin callers here.
 
-#[cfg(windows)]
-use cpal::traits::{DeviceTrait, HostTrait};
+mod audio_route;
+
+pub use audio_route::{AudioEndpoint, AudioOutput};
 use sail_core::{
     parse_event, Command, Error as CoreError, Event, SailDevice, SpeakerEqPreset, Transport,
     FRAME_LEN,
@@ -96,49 +97,6 @@ impl Link {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct AudioOutput {
-    pub name: Option<String>,
-    pub is_headset: bool,
-    pub error: Option<String>,
-}
-
-#[cfg(windows)]
-fn current_audio_output() -> AudioOutput {
-    match cpal::default_host().default_output_device() {
-        Some(device) => match device.name() {
-            Ok(name) => {
-                let lower = name.to_ascii_lowercase();
-                AudioOutput {
-                    is_headset: lower.contains("blackshark"),
-                    name: Some(name),
-                    error: None,
-                }
-            }
-            Err(error) => AudioOutput {
-                name: None,
-                is_headset: false,
-                error: Some(format!("cannot read default output name: {error}")),
-            },
-        },
-        None => AudioOutput {
-            name: None,
-            is_headset: false,
-            error: Some("no default output device".into()),
-        },
-    }
-}
-
-#[cfg(not(windows))]
-fn current_audio_output() -> AudioOutput {
-    AudioOutput {
-        name: None,
-        is_headset: true,
-        error: Some("audio output check is Windows-only".into()),
-    }
-}
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
 pub struct DeviceSnapshot {
     pub connected: bool,
     pub link: Link,
@@ -167,7 +125,7 @@ impl DeviceSnapshot {
             dongle_led: Field::Error(reason.clone()),
             speaker_preset_eq: Field::Error(reason.clone()),
             edition: Field::Error(reason.clone()),
-            audio_output: current_audio_output(),
+            audio_output: audio_route::current_output(),
             issues: vec![reason],
         }
     }
@@ -477,7 +435,7 @@ impl SailApp {
             dongle_led,
             speaker_preset_eq,
             edition,
-            audio_output: current_audio_output(),
+            audio_output: audio_route::current_output(),
             issues,
         }
     }
@@ -487,6 +445,11 @@ impl SailApp {
             Ok(snapshot) => snapshot,
             Err(error) => ThxSnapshot::unavailable(error),
         }
+    }
+
+    pub fn set_default_audio_output(&self, device_id: Option<&str>) -> Result<(), String> {
+        // An empty selector means "pick the first Razer headset endpoint".
+        audio_route::set_default(device_id.unwrap_or(""))
     }
 
     pub fn eq_presets(&self) -> Vec<EqPreset> {

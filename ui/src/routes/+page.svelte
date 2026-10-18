@@ -13,6 +13,7 @@
   import DemoPanel from "$lib/components/DemoPanel.svelte";
   import MicPanel from "$lib/components/MicPanel.svelte";
   import SettingsPanel from "$lib/components/SettingsPanel.svelte";
+  import AudioRouteGate from "$lib/components/AudioRouteGate.svelte";
 
   type Tab = "device" | "sound" | "demo" | "mic" | "settings";
 
@@ -110,3 +111,5 @@
     </div>
   </main>
 </div>
+
+<AudioRouteGate />

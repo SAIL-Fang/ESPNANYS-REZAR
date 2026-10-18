@@ -18,5 +18,9 @@ export const api = {
   setNormalizationEnabled: (enabled: boolean) =>
     invoke<void>("set_normalization_enabled", { enabled }),
   setSpatial: (enabled: boolean) => invoke<void>("set_spatial", { enabled }),
-  verifyThx: () => invoke<string>("verify_thx")
+  verifyThx: () => invoke<string>("verify_thx"),
+  setDefaultAudioOutput: (deviceId?: string) =>
+    invoke<void>("set_default_audio_output", { deviceId: deviceId ?? null }),
+  openSoundSettings: () => invoke<void>("open_sound_settings"),
+  quitApp: () => invoke<void>("quit_app")
 };

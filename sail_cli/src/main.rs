@@ -85,6 +85,14 @@ fn run(mut args: Vec<String>) -> Result<(), Box<dyn std::error::Error>> {
             print_snapshot(&SailApp::new().snapshot());
             return Ok(());
         }
+        "audio-default" if pid.is_none() => {
+            let id = args.get(1).map(String::as_str);
+            SailApp::new()
+                .set_default_audio_output(id)
+                .map_err(std::io::Error::other)?;
+            println!("default audio output switched");
+            return Ok(());
+        }
         _ => {}
     }
 
@@ -189,10 +197,12 @@ Commands:
   sidetone-volume 0..15      hardware sidetone volume
   eq-preset game|music|cinema|custom|7|8|9|255
   eq-gains v0 ... v9         ten signed dB values
+  audio-default [endpoint-id] switch default render device (headset if omitted)
   watch [--count N]          print device events
 
 Examples:
   sail_cli status
+  sail_cli audio-default
   sail_cli eq-preset game
   sail_cli eq-gains 1 -5 -3 0 1 1 1 1 1 -3
 "#
@@ -237,6 +247,23 @@ fn print_snapshot(snapshot: &DeviceSnapshot) {
             "not headset"
         }
     );
+    for endpoint in &snapshot.audio_output.endpoints {
+        println!(
+            "audio-endpoint: [{}] {}{}{}",
+            endpoint.id,
+            endpoint.name,
+            if endpoint.is_default {
+                " (default)"
+            } else {
+                ""
+            },
+            if endpoint.is_headset {
+                " (headset)"
+            } else {
+                ""
+            }
+        );
+    }
     if !snapshot.issues.is_empty() {
         println!("issues: {}", snapshot.issues.join("; "));
     }

@@ -12,6 +12,13 @@ export type Field<T> =
 
 export type Link = "disconnected" | "wireless" | "wired" | "unknown";
 
+export type AudioEndpoint = {
+  id: string;
+  name: string;
+  isHeadset: boolean;
+  isDefault: boolean;
+};
+
 export type DeviceSnapshot = {
   connected: boolean;
   link: Link;
@@ -27,6 +34,7 @@ export type DeviceSnapshot = {
     name: string | null;
     isHeadset: boolean;
     error: string | null;
+    endpoints: AudioEndpoint[];
   };
   issues: string[];
 };
