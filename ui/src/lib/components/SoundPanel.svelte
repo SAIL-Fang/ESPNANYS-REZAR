@@ -7,7 +7,7 @@
 <script lang="ts">
   import { device } from "$lib/device.svelte";
   import { chargingText, fieldText, known } from "$lib/types";
-  import { DEFAULT_EQ_GAINS, frequencies } from "$lib/presets";
+  import { DEFAULT_EQ_GAINS, DEFAULT_NORMALIZATION_LEVEL, frequencies } from "$lib/presets";
   import EqEditor from "$lib/components/EqEditor.svelte";
   import NormalizationPanel from "$lib/components/NormalizationPanel.svelte";
   import SpatialModeToggle from "$lib/components/SpatialModeToggle.svelte";
@@ -19,7 +19,7 @@
   let gains = $state<number[]>([...DEFAULT_GAINS]);
   let saveTimer: ReturnType<typeof setTimeout> | null = null;
   let savingEq = $state(false);
-  let level = $state(10);
+  let level = $state(DEFAULT_NORMALIZATION_LEVEL);
   let normalizationOn = $state(false);
   let synced = $state(false);
 

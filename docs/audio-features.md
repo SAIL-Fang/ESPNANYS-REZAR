@@ -180,6 +180,7 @@ UI：增强 → 麦克风降噪，默认开启，滑杆 60。
 ## 5. 声音标准化（增强页）
 
 - UI：增强 → 声音标准化，默认开，滑杆 10。
+- **ESPNANYS-REZAR 默认等级改为 5**（Synapse 组件默认仍是 10）。首次启动写 5；用户改过以后把最后值存到 WebView `localStorage`，下次启动优先恢复该值，没有记录才用 5。
 - 开关：`SetRenderNormalization(containerId, true/false)`
 - 等级：`SetRenderNormalizationLevel(containerId, 0..100)`
 - 实测 UI 54 → 54，1:1。

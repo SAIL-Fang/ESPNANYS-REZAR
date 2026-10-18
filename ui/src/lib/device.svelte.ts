@@ -5,8 +5,21 @@
  * SPDX-License-Identifier: MIT
  */
 import { api } from "./api";
-import { DEFAULT_EQ_GAINS } from "./presets";
+import { DEFAULT_EQ_GAINS, DEFAULT_NORMALIZATION_LEVEL } from "./presets";
 import type { DeviceSnapshot, EqPreset, ThxSnapshot } from "./types";
+
+const NORMALIZATION_KEY = "sail.normalizationLevel";
+
+function storedNormalizationLevel(): number {
+  try {
+    const raw = localStorage.getItem(NORMALIZATION_KEY);
+    const value = raw ? Number(raw) : NaN;
+    if (Number.isFinite(value) && value >= 1 && value <= 100) return Math.round(value);
+  } catch {
+    // localStorage can be unavailable in a restricted webview; use default.
+  }
+  return DEFAULT_NORMALIZATION_LEVEL;
+}
 
 export class DeviceStore {
   status = $state<DeviceSnapshot | null>(null);
@@ -22,9 +35,32 @@ export class DeviceStore {
   private refreshEpoch = 0;
   private pending = 0;
   private defaultEqApplied = false;
+  private normalizationApplied = false;
 
   get thxError(): string {
     return this.thx?.error ?? this.thxReadError;
+  }
+
+  private desiredNormalizationLevel(): number {
+    return storedNormalizationLevel();
+  }
+
+  private async applyDesiredNormalization(level: number) {
+    this.pending += 1;
+    this.busy = true;
+    try {
+      await api.setNormalization(level);
+      if (this.thx) this.thx = { ...this.thx, level };
+      this.notice = `声音标准化默认 ${level}`;
+    } catch (error) {
+      // Retry on a later successful THX read rather than silently showing a
+      // level that was never written.
+      this.normalizationApplied = false;
+      this.error = `声音标准化默认值写入失败：${errorText(error)}`;
+    } finally {
+      this.pending -= 1;
+      this.busy = this.pending > 0;
+    }
   }
 
   private async applyDefaultEqOnce() {
@@ -84,7 +120,20 @@ export class DeviceStore {
         try {
           const thx = await api.getThxStatus();
           this.settle(epoch, () => {
-            this.thx = thx;
+            let next = thx;
+            if (!this.normalizationApplied && thx.enabled === true) {
+              const desired = this.desiredNormalizationLevel();
+              if (thx.level !== desired) {
+                // Show and write the preferred level before Synapse/THX can
+                // leave the preset's default (usually 10) in place.
+                next = { ...thx, level: desired };
+                this.normalizationApplied = true;
+                void this.applyDesiredNormalization(desired);
+              } else {
+                this.normalizationApplied = true;
+              }
+            }
+            this.thx = next;
             this.thxReadError = "";
           });
         } catch (error) {
@@ -139,7 +188,15 @@ export class DeviceStore {
   }
 
   async saveNormalization(level: number) {
-    await this.run(() => api.setNormalization(level), `声音标准化 ${level}`);
+    const ok = await this.run(() => api.setNormalization(level), `声音标准化 ${level}`);
+    if (ok) {
+      this.normalizationApplied = true;
+      try {
+        localStorage.setItem(NORMALIZATION_KEY, String(level));
+      } catch {
+        // Persistence is best-effort; the write to THX already succeeded.
+      }
+    }
     await this.refreshThx();
   }
 
@@ -149,6 +206,13 @@ export class DeviceStore {
       enabled ? "声音标准化已开启" : "声音标准化已关闭"
     );
     await this.refreshThx();
+    if (ok && enabled) {
+      const desired = this.desiredNormalizationLevel();
+      if (this.thx?.level !== desired) {
+        this.normalizationApplied = false;
+        void this.applyDesiredNormalization(desired);
+      }
+    }
     return ok;
   }
 

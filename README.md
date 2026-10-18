@@ -473,7 +473,7 @@ THX 是挂在耳机音频 endpoint 上的 **Windows APO**（版本 3.2.3.0），
 |---|---|
 | 扬声器均衡器预设/频段 | **HID `0x93` + `0x95`**，同时写 THX `SetRenderEQGains` |
 | 麦克风均衡器预设/频段 | **只走 THX `SetCaptureEQGains`**；写入 JSON 10 值，`SetCaptureEQ(true)` 才会生效；HID `0x96` 返回 status 5 |
-| 声音标准化 | 只走 THX `SetRenderNormalization` / `Level`（DRC） |
+| 声音标准化 | 只走 THX `SetRenderNormalization` / `Level`（DRC）；默认等级 **5**，用户改过后保存到 `localStorage`，重启自动恢复 |
 | 噪声门 | THX `SetCaptureVoiceGate` / `SetCaptureVoiceGateLevel(float)`；UI 1–5 → -60…-20 dB |
 | 麦克风降噪 | THX `SetCaptureNoiseReduction` / `Level`；0–100 1:1 |
 | 音量标准化 / 亮丽人声 | THX `SetCaptureNormalization` / `SetCaptureVocalClarity` + `Level` |
