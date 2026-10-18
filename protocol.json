@@ -1,0 +1,310 @@
+{
+  "schema": "razer-blackshark-v2-hyperspeed/hid-protocol@1",
+  "device": {
+    "name": "Razer BlackShark V2 HyperSpeed",
+    "aliases": [
+      "Razer BlackShark V2 HS 2.4",
+      "旋风黑鲨 V2 极速版"
+    ],
+    "vendor_id": "0x1532",
+    "product_ids": {
+      "wireless_dongle": "0x0565",
+      "wired_usb": "0x056E"
+    },
+    "family": "ODESSA",
+    "synapse_device_page": "https://apps.razer.com/synapse/products/1390/mw/index.html"
+  },
+  "hid": {
+    "interface_number": 3,
+    "usage_page": "0xFF14",
+    "usage": 1,
+    "report_id": 2,
+    "report_size_bytes": 64,
+    "input_payload_bytes": 63,
+    "output_payload_bytes": 63,
+    "feature_report": {
+      "report_id": 2,
+      "bytes": 8,
+      "used_by_protocol": false
+    },
+    "synapse_open_order": [
+      "Col01 0xFF13 (61-byte output report 6) - write fails",
+      "Col02 0x000C (consumer control) - write fails",
+      "Col03 0x000B (headset/telephony) - write fails",
+      "Col04 0xFF14 (64-byte output report 2) - succeeds"
+    ],
+    "notes": [
+      "Open the 0xFF14 collection; other collections on interface 3 are not writable for this protocol.",
+      "The 64-byte frame includes the 0x02 report ID as byte 0.",
+      "A short settle delay after open is advisable; drain queued input reports first."
+    ]
+  },
+  "frame": {
+    "size": 64,
+    "request_type_byte": "0x00",
+    "response_type_byte": "0x02",
+    "event_type_bytes": ["0x0A", "0x09"],
+    "offsets": {
+      "report_id": 0,
+      "type": 1,
+      "sequence": 2,
+      "class": [6, 7],
+      "marker_a": 8,
+      "marker_b": 9,
+      "command_or_record": 10,
+      "subcommand_or_status": 11,
+      "length": 12,
+      "payload": 13,
+      "checksum": 62,
+      "trailer": 63
+    },
+    "checksum": {
+      "formula": "xor(frame[2:62]) ^ 0x02",
+      "applies_to": ["requests", "responses"],
+      "note": "Event frames showed a variant in some captures; not required for parsing."
+    },
+    "sequence": {
+      "start_at": "0x60",
+      "observed_behavior": "frames with sequence 0x41-0x52 were ignored; 0x61+ answered",
+      "echoed_by_device": true,
+      "wrap": "0x00..0xFF; 0 was not used in tests"
+    }
+  },
+  "request_classes": {
+    "get": {
+      "class_bytes": ["0x04", "0x00"],
+      "marker_bytes": ["0x00", "0x80"],
+      "layout": "class 04 00, target at 10, flags at 9 (normally 0x80; 0x00 for dongle LED), length 0"
+    },
+    "set1": {
+      "class_bytes": ["0x05", "0x00"],
+      "marker_bytes": ["0x00", "0x80"],
+      "layout": "class 05 00, command at 10, subcommand at 11, length at 12, 1-byte payload at 13"
+    },
+    "set10": {
+      "class_bytes": ["0x0E", "0x00"],
+      "marker_bytes": ["0x00", "0x80"],
+      "layout": "class 0E 00, command at 10, subcommand at 11, length 10 at 12, 10 bytes at 13..22"
+    }
+  },
+  "response": {
+    "type": "0x02",
+    "class_bytes": "low byte = 4 + data length (observed 0x05 for 1 byte, 0x08 for 4 bytes, 0x13 for 15 bytes); high byte 0",
+    "class_note": "Do not match responses by class; match type, seq, cmd.",
+    "markers": ["0x80", "0x80"],
+    "command": 10,
+    "status": 11,
+    "status_success": 1,
+    "length": 12,
+    "data": "13..13+length-1",
+    "observed_errors": {
+      "5": "not supported (e.g. 0x96 on 0x0565)"
+    }
+  },
+  "events": {
+    "type": ["0x0A", "0x09"],
+    "record_id": 10,
+    "value": 13,
+    "records": {
+      "0x20": "wireless_connection_status",
+      "0x21": "battery_status",
+      "0x27": "do_not_disturb",
+      "0x55": "mic_status"
+    }
+  },
+  "commands": {
+    "serial": {
+      "cmd": "0x00",
+      "sub": "0x00",
+      "kind": "get",
+      "observed_data_ascii": "HN0000000000000",
+      "observed_data_len": 15
+    },
+    "edition": {
+      "cmd": "0x01",
+      "sub": "0x00",
+      "kind": "get",
+      "observed_data": [0]
+    },
+    "firmware": {
+      "cmd": "0x02",
+      "sub": "0x00",
+      "kind": "get",
+      "observed_data": [1, 6, 11, 0],
+      "decoded": "1.6.11.0"
+    },
+    "speaker_preset_eq": {
+      "cmd": "0x1E",
+      "sub": "0x00",
+      "kind": "get",
+      "observed_data": [0]
+    },
+    "battery": {
+      "cmd": "0x21",
+      "sub": "0x00",
+      "kind": "get",
+      "observed_data": [39],
+      "unit": "percent"
+    },
+    "charging": {
+      "cmd": "0x2A",
+      "sub": "0x00",
+      "kind": "get",
+      "observed_data": [0],
+      "decoded": "0 = not charging"
+    },
+    "auto_power_off": {
+      "cmd": "0x2C",
+      "sub": "0x00",
+      "kind": "get",
+      "observed_data": [15],
+      "unit": "minutes"
+    },
+    "dongle_led": {
+      "cmd": "0x66",
+      "sub": "0x00",
+      "kind": "get",
+      "flags9": "0x00",
+      "observed_data": [2]
+    },
+    "preset_eq_index": {
+      "cmd": "0x93",
+      "sub": "0x00",
+      "kind": "set1",
+      "observed_values": {
+        "7": "Game",
+        "8": "Music",
+        "9": "Cinema",
+        "255": "Custom"
+      }
+    },
+    "eq_gains": {
+      "cmd": "0x95",
+      "sub": "0x00",
+      "kind": "set10",
+      "payload": "10 signed bytes",
+      "observed_example": [1, -5, -3, 0, 1, 1, 1, 1, 1, -3],
+      "preset_gains": {
+        "game": [1, -5, -3, 0, 1, 1, 1, 1, 1, -3],
+        "music": [3, 3, 2, 0, 1, 1, 1, 1, 1, -3],
+        "cinema": [4, 4, 3, -4, -6, -3, 1, 3, 1, -1],
+        "custom": [3, 3, 2, 0, 1, 1, 1, 1, 1, -1]
+      },
+      "note": "matches the 10-band EQ values also sent to THX via SetRenderEQGains"
+    },
+    "mic_preset_eq": {
+      "cmd": "0x96",
+      "sub": "0x00",
+      "kind": "set1",
+      "observed_status": 5,
+      "note": "not supported on the 0x0565 wireless dongle in captures"
+    },
+    "sidetone": {
+      "cmd": "0x98",
+      "sub": "0x00",
+      "kind": "set1",
+      "payload": [0, 1],
+      "observed": "0x98 00 01 01 enables; 0x98 00 01 00 disables"
+    },
+    "sidetone_volume": {
+      "cmd": "0x99",
+      "sub": "0x00",
+      "kind": "set1",
+      "observed": "UI level 50 produced payload 7; exact 0-100 -> device mapping not yet pinned"
+    },
+    "speaker_eq_status": {
+      "cmd": "0x9E",
+      "sub": "0x00",
+      "kind": "set1",
+      "observed_data": [0]
+    }
+  },
+  "thx": {
+    "module": "ThxV3Native_v1.1.42.1.dll",
+    "apo_version": "3.2.3.0",
+    "user_state_registry": "HKCU\\Software\\THX\\SpatialAudio\\UserState",
+    "install_registry": [
+      "HKLM\\SOFTWARE\\THX\\THXSpatialAudio\\THXUSBAPOInstaller-RazerBlackSharkV2HS-0565-3.2.3.0",
+      "HKLM\\SOFTWARE\\THX\\THXSpatialAudio\\THXUSBAPOInstaller-RazerBlackSharkV2HS-056E-3.2.3.0"
+    ],
+    "normalization": {
+      "synapse_label": "声音标准化",
+      "thx_fields": ["drc_enabled", "drc_level"],
+      "api": [
+        "SetRenderNormalization(containerId, bool)",
+        "SetRenderNormalizationLevel(containerId, 0..100)"
+      ],
+      "observed": "Game mode: true / 10; Music/Cinema/Custom/PUBG: true / 100; UI 54 -> THX 54",
+      "does_not_use_hid": true
+    }
+  },
+  "audio_features": {
+    "speaker_eq": {
+      "hid": ["0x93 preset index", "0x95 10 signed bytes"],
+      "thx": ["SetRenderPreset", "SetRenderBatch", "SetRenderEQGains"],
+      "preset_indices": {"game": 7, "music": 8, "cinema": 9, "custom": 255},
+      "frequencies_hz": [31, 63, 125, 250, 500, 1000, 2000, 4000, 8000, 16000]
+    },
+    "mic_eq": {
+      "hid": "0x96 unsupported (status 5)",
+      "thx": ["SetCaptureEQGains(containerId, [10 values])"],
+      "presets": {
+        "default": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        "mic_boost": [2, 4, 6, 7, 7, 7, 7, 6, 4, 2],
+        "streaming": [4, 4, 4, 3, -2, -7, -4, -2, -3, -5],
+        "conference": [-8, -6, -5, -3, -1, 1, 3, 2, 1, 0],
+        "custom": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+      }
+    },
+    "mic": {
+      "noise_gate": {
+        "enable": "SetCaptureVoiceGate(bool)",
+        "level": "SetCaptureVoiceGateLevel(dB)",
+        "ui_to_db": {"1": -60, "2": -50, "3": -40, "4": -30, "5": -20}
+      },
+      "noise_reduction": {
+        "enable": "SetCaptureNoiseReduction(bool)",
+        "level": "SetCaptureNoiseReductionLevel(0..100)",
+        "default": {"enabled": true, "level": 60}
+      },
+      "normalization": {
+        "enable": "SetCaptureNormalization(bool)",
+        "level": "SetCaptureNormalizationLevel(0..100)",
+        "default": {"enabled": false, "level": 55}
+      },
+      "vocal_clarity": {
+        "enable": "SetCaptureVocalClarity(bool)",
+        "level": "SetCaptureVocalClarityLevel(0..100)",
+        "default": {"enabled": false, "level": 55}
+      },
+      "volume": "SetCaptureVolumeBySystem(0..100)",
+      "mic_test": "SetCapturePreview(bool)",
+      "sidetone": {
+        "thx": ["SetStartCaptureStatus(bool)", "SetCaptureSidetoneLevel(1582)"],
+        "hid": ["0x98 01/00", "0x99 07 (UI 50)"]
+      }
+    }
+  },
+  "health": {
+    "known_working": [
+      "serial",
+      "edition",
+      "firmware",
+      "speaker_preset_eq",
+      "battery",
+      "charging",
+      "auto_power_off",
+      "dongle_led",
+      "sidetone write",
+      "speaker EQ preset + 10-band write",
+      "mic noise gate / noise reduction / normalization / vocal clarity (THX)",
+      "sound normalization (THX DRC)"
+    ],
+    "known_unsupported_or_unverified": [
+      "mic_preset_eq on 0x0565 returns status 5",
+      "exact sidetone volume scale",
+      "event checksum variant",
+      "single-band EQ drag payload (preset arrays verified)"
+    ]
+  }
+}

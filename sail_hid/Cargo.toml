@@ -1,0 +1,11 @@
+[package]
+name = "sail_hid"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "SAIL Windows HID transport for the Razer BlackShark V2 HyperSpeed"
+
+[dependencies]
+sail_core = { path = "../sail_core" }
+hidapi = "2"

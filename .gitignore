@@ -1,0 +1,22 @@
+__pycache__/
+*.pyc
+
+# Rust
+target/
+
+# Tauri / frontend
+ui/node_modules/
+ui/dist/
+ui/src-tauri/target/
+ui/.vite/
+
+# Local
+.env
+*.local
+sail-thx-trace.txt
+dist/
+
+# Raw vendor/private captures (keep only the public screenshot)
+captures/*
+!captures/screenshots/
+!captures/screenshots/*

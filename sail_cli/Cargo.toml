@@ -1,0 +1,12 @@
+[package]
+name = "sail_cli"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "SAIL command-line interface"
+
+[dependencies]
+sail_app = { path = "../sail_app" }
+sail_core = { path = "../sail_core" }
+sail_hid = { path = "../sail_hid" }

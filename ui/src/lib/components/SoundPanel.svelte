@@ -1,0 +1,144 @@
+<script lang="ts">
+  import { device } from "$lib/device.svelte";
+  import { chargingText, fieldText, known } from "$lib/types";
+  import { frequencies } from "$lib/presets";
+  import EqEditor from "$lib/components/EqEditor.svelte";
+  import NormalizationPanel from "$lib/components/NormalizationPanel.svelte";
+
+  let eqPreset = $state("game");
+  let gains = $state<number[]>([]);
+  let level = $state(10);
+  let normalizationOn = $state(false);
+  let synced = $state(false);
+  let presetsReady = $state(false);
+
+  let available = $derived(!!device.thx?.installed);
+  let battery = $derived(known(device.status?.battery, 0));
+
+  $effect(() => {
+    if (!presetsReady && device.presets.length > 0) {
+      eqPreset = device.presets[0].id;
+      gains = [...device.presets[0].gains];
+      presetsReady = true;
+    }
+  });
+
+  $effect(() => {
+    if (!synced && device.thx) {
+      level = device.thx.level ?? level;
+      normalizationOn = device.thx.enabled ?? false;
+      synced = true;
+    }
+  });
+
+  function selectPreset(id: string) {
+    const preset = device.presets.find((item) => item.id === id);
+    if (!preset) return;
+    eqPreset = id;
+    gains = [...preset.gains];
+    void device.setEqPreset(id, preset.label);
+  }
+
+  function updateGain(index: number, value: number) {
+    eqPreset = "custom";
+    gains = gains.map((gain, slot) => (slot === index ? value : gain));
+  }
+
+  function resetGains() {
+    eqPreset = "custom";
+    gains = Array.from({ length: 10 }, () => 0);
+  }
+
+  async function applyGains() {
+    await device.setEqGains(gains);
+  }
+
+  async function saveNormalization() {
+    await device.saveNormalization(level);
+  }
+
+  async function toggleNormalization() {
+    normalizationOn = !normalizationOn;
+    await device.setNormalizationEnabled(normalizationOn);
+  }
+</script>
+
+<div class="page-head">
+  <div>
+    <h1>声音</h1>
+    <p>为这副耳机调出你想要的空间和力度。每个频段都能直接输入数值，不必和细小的滑杆较劲。</p>
+  </div>
+  <span class="badge" class:ok={available} class:warn={!available}>
+    {available ? `THX ${device.thx?.level ?? "—"}` : "THX 未安装"}
+  </span>
+</div>
+
+<section class="panel eq-panel" aria-labelledby="eq-title">
+  <div class="eq-head">
+    <div>
+      <h2 id="eq-title">均衡器</h2>
+      <p>拖动曲线，或直接输入 <b>dB</b> 值。</p>
+    </div>
+    <div class="preset-seg" role="group" aria-label="均衡器预设">
+      {#each device.presets as preset}
+        <button
+          type="button"
+          class:on={eqPreset === preset.id}
+          onclick={() => selectPreset(preset.id)}
+          disabled={device.busy}
+        >
+          {preset.label}
+        </button>
+      {/each}
+    </div>
+  </div>
+
+  {#if gains.length === 10}
+    <EqEditor
+      {gains}
+      {frequencies}
+      busy={device.busy}
+      oninput={updateGain}
+      onapply={applyGains}
+      onreset={resetGains}
+    />
+  {:else}
+    <p class="muted">加载均衡器预设…</p>
+  {/if}
+
+  <p class="inline-status">{device.notice}</p>
+</section>
+
+<div class="bottom-grid">
+  <NormalizationPanel
+    {level}
+    enabled={normalizationOn}
+    {available}
+    busy={device.busy}
+    thxError={device.thxError}
+    onlevel={(value: number) => (level = value)}
+    ontoggle={toggleNormalization}
+    onsave={saveNormalization}
+  />
+
+  <section class="panel status-summary" aria-labelledby="status-title">
+    <div class="status-line">
+      <div>
+        <div class="eyebrow">连接</div>
+        <h3 id="status-title">耳机状态</h3>
+      </div>
+      <span class="badge" class:ok={device.status?.connected}>
+        {chargingText(device.status?.charging)}
+      </span>
+    </div>
+    <dl class="kv">
+      <dt>链路</dt><dd>{device.status?.link === "wired" ? "有线 USB" : device.status?.link === "wireless" ? "无线 2.4G" : "—"}</dd>
+      <dt>电量</dt><dd>{fieldText(device.status?.battery, "%")}</dd>
+      <dt>固件</dt><dd>{fieldText(device.status?.firmware)}</dd>
+    </dl>
+    <div class="battery-line">
+      <span class="battery-bar"><span style={`width:${Math.min(100, Math.max(0, battery))}%`}></span></span>
+      <span class="battery-value">{battery}%</span>
+    </div>
+  </section>
+</div>

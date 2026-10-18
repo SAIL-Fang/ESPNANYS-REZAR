@@ -1,0 +1,328 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>SAIL · 均衡器概念稿</title>
+<style>
+  :root {
+    --ink: #15181e;
+    --ink-2: #333a45;
+    --muted: #5d6673;
+    --faint: #8b95a2;
+    --line: rgba(21, 24, 30, 0.09);
+    --glass: rgba(255, 255, 255, 0.58);
+    --blue: #2f6bff;
+    --blue-deep: #1e54d8;
+    --blue-soft: #e3ebff;
+    --green: #16845f;
+    --font: "SF Pro Display", "SF Pro Text", "Segoe UI Variable Display", "Segoe UI", "PingFang SC", "Microsoft YaHei UI", sans-serif;
+    --mono: "SF Mono", "Cascadia Mono", "Segoe UI Mono", monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; }
+  body {
+    font-family: var(--font); color: var(--ink);
+    background:
+      radial-gradient(900px 620px at 85% -12%, rgba(126, 166, 255, .34), transparent 62%),
+      radial-gradient(700px 480px at 8% 110%, rgba(204, 215, 230, .66), transparent 66%),
+      linear-gradient(135deg, #e6ebf0 0%, #f5f7f9 48%, #e4e9ef 100%);
+    -webkit-font-smoothing: antialiased;
+  }
+  button, input { font: inherit; }
+  button { color: inherit; cursor: pointer; }
+  button:focus-visible, input:focus-visible {
+    outline: 3px solid rgba(47,107,255,.35); outline-offset: 2px;
+  }
+  .app {
+    display: grid; grid-template-columns: 210px minmax(0, 1fr);
+    gap: 14px; min-height: 100vh; padding: 16px;
+  }
+
+  .rail {
+    display: flex; flex-direction: column; padding: 22px 12px 16px;
+    border-radius: 24px; border: 1px solid rgba(255,255,255,.76);
+    background: linear-gradient(180deg, rgba(255,255,255,.56), rgba(246,248,251,.38));
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.92);
+  }
+  .brand { display: flex; align-items: baseline; gap: 8px; padding: 0 10px 26px; }
+  .brand b { font-size: 14px; letter-spacing: .2em; }
+  .brand span { color: var(--faint); font-size: 9px; letter-spacing: .12em; }
+  .nav { display: grid; gap: 3px; }
+  .nav a {
+    display: flex; align-items: center; gap: 11px; height: 40px; padding: 0 11px;
+    border-radius: 11px; color: var(--muted); text-decoration: none; font-size: 13px; font-weight: 500;
+  }
+  .nav a svg { width: 16px; height: 16px; opacity: .75; }
+  .nav a.active {
+    color: var(--ink); background: rgba(255,255,255,.78);
+    box-shadow: 0 1px 2px rgba(16,24,40,.06), inset 0 0 0 1px rgba(255,255,255,.88);
+  }
+  .nav a.active svg { color: var(--blue); opacity: 1; }
+  .rail-foot { margin-top: auto; padding: 14px 10px 0; border-top: 1px solid var(--line); }
+  .device { display: flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 600; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); box-shadow: 0 0 0 3px rgba(22,132,95,.1); }
+  .meta { margin-top: 6px; color: var(--muted); font-size: 11px; line-height: 1.6; }
+  .meta .mono { font-family: var(--mono); font-size: 10.5px; }
+
+  .main {
+    min-width: 0; border-radius: 26px; border: 1px solid rgba(255,255,255,.86);
+    background: linear-gradient(150deg, rgba(255,255,255,.74), rgba(248,250,252,.54));
+    box-shadow: 0 26px 70px rgba(32,45,70,.13), 0 2px 8px rgba(32,45,70,.04);
+    backdrop-filter: blur(28px) saturate(130%);
+  }
+  .topbar {
+    height: 50px; padding: 0 28px; display: flex; align-items: center; justify-content: space-between;
+    border-bottom: 1px solid var(--line); color: var(--muted); font-size: 11.5px;
+  }
+  .trail { display: flex; gap: 7px; align-items: center; }
+  .trail b { color: var(--ink-2); font-weight: 600; }
+  .thx {
+    display: inline-flex; align-items: center; gap: 6px; height: 25px; padding: 0 10px;
+    border-radius: 999px; color: #126c50; background: rgba(22,132,95,.08);
+    font-size: 11px; font-weight: 600;
+  }
+  .content { padding: 26px 30px 24px; }
+  .title-row { display: flex; align-items: flex-end; justify-content: space-between; gap: 22px; padding-bottom: 22px; }
+  h1 { margin: 0; font-size: 32px; line-height: 1.08; letter-spacing: -.04em; font-weight: 650; }
+  .subtitle { margin: 7px 0 0; color: var(--muted); font-size: 12.5px; line-height: 1.55; max-width: 540px; }
+  .seg {
+    display: flex; padding: 3px; border-radius: 10px;
+    background: rgba(21,24,30,.045); border: 1px solid rgba(21,24,30,.05);
+  }
+  .seg button { height: 28px; padding: 0 12px; border: 0; border-radius: 7px; background: transparent; color: var(--muted); font-size: 11.5px; font-weight: 600; }
+  .seg button.on { background: #fff; color: var(--ink); box-shadow: 0 1px 3px rgba(20,28,45,.09); }
+
+  .panel {
+    padding: 22px 22px 0; border-radius: 18px; border: 1px solid rgba(255,255,255,.78);
+    background: rgba(255,255,255,.42); box-shadow: inset 0 1px 0 rgba(255,255,255,.82);
+  }
+  .panel-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; }
+  h2 { margin: 0; font-size: 16px; letter-spacing: -.015em; font-weight: 650; }
+  .panel-head p { margin: 5px 0 0; color: var(--muted); font-size: 11.5px; }
+  .panel-head p b { color: var(--ink-2); font-weight: 600; }
+  .presets { display: flex; gap: 3px; padding: 3px; border-radius: 10px; background: rgba(21,24,30,.045); border: 1px solid rgba(21,24,30,.05); }
+  .presets button { height: 28px; padding: 0 11px; border: 0; border-radius: 7px; background: transparent; color: var(--muted); font-size: 11.5px; font-weight: 600; }
+  .presets button.on { background: #fff; color: var(--ink); box-shadow: 0 1px 3px rgba(20,28,45,.08); }
+
+  .graph { position: relative; height: 158px; margin: 14px 2px 0 34px; border-bottom: 1px solid var(--line); }
+  .graph svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+  .axis { position: absolute; left: -31px; width: 25px; text-align: right; color: #9aa4b0; font-family: var(--mono); font-size: 8.5px; transform: translateY(-50%); }
+  .unit-note { position: absolute; right: 2px; top: -2px; color: var(--faint); font-family: var(--mono); font-size: 9px; }
+
+  .bands { display: grid; grid-template-columns: repeat(10, minmax(0,1fr)); gap: 1px; padding: 10px 0 18px; }
+  .band { min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+  .gain { order: 1; display: grid; grid-template-columns: 16px 42px 16px; align-items: center; height: 27px; border-radius: 7px; border: 1px solid transparent; transition: 150ms ease; }
+  .gain button { width: 16px; height: 21px; padding: 0; border: 0; background: transparent; color: var(--faint); font-size: 12px; line-height: 1; }
+  .gain button:hover { color: var(--ink); }
+  .gain input {
+    width: 42px; height: 23px; padding: 0 1px; border: 1px solid rgba(21,24,30,.09);
+    border-radius: 5px; background: rgba(255,255,255,.48); color: var(--ink-2);
+    font-family: var(--mono); font-size: 11px; font-variant-numeric: tabular-nums; text-align: center;
+  }
+  .gain input:focus { background: #fff; border-color: rgba(47,107,255,.46); }
+  .band.active .gain { background: rgba(255,255,255,.9); border-color: rgba(47,107,255,.22); box-shadow: 0 0 0 3px rgba(47,107,255,.065); }
+  .band.active .gain input { border-color: rgba(47,107,255,.42); background: #fff; color: var(--blue-deep); }
+  .band.active .gain button { color: var(--blue); }
+
+  .fader { order: 3; position: relative; width: 24px; height: 100px; display: flex; justify-content: center; }
+  .fader::before { content: ""; position: absolute; top: 7px; bottom: 7px; width: 3px; border-radius: 3px; background: rgba(21,24,30,.13); }
+  .fader .fill { position: absolute; left: 50%; width: 3px; transform: translateX(-50%); border-radius: 3px; background: linear-gradient(180deg, #5d8cff, #2f6bff); opacity: .55; }
+  .fader .zero { position: absolute; left: 3px; right: 3px; top: 50%; height: 1px; background: rgba(21,24,30,.13); }
+  .fader .thumb { position: absolute; left: 50%; bottom: calc(var(--p) * 1%); width: 13px; height: 13px; border-radius: 50%; transform: translate(-50%, 50%); background: #fff; border: 1px solid rgba(21,24,30,.17); box-shadow: 0 2px 4px rgba(20,28,45,.15), 0 0 0 2px rgba(255,255,255,.72); }
+  .band.active .thumb { border-color: var(--blue); box-shadow: 0 2px 7px rgba(47,107,255,.28), 0 0 0 3px rgba(47,107,255,.1); }
+  .freq { order: 4; color: var(--muted); font-family: var(--mono); font-size: 9px; }
+  .freq span { color: var(--faint); font-size: 7.5px; margin-left: 1px; }
+
+  .panel-foot { display: flex; justify-content: space-between; align-items: center; gap: 18px; min-height: 58px; padding: 12px 2px 14px; border-top: 1px solid var(--line); }
+  .hint { color: var(--muted); font-size: 10.5px; display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
+  .hint kbd { display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 4px; border: 1px solid rgba(21,24,30,.11); border-radius: 4px; background: rgba(255,255,255,.6); color: var(--ink-2); font-family: var(--mono); font-size: 9px; box-shadow: 0 1px 0 rgba(21,24,30,.04); }
+  .actions { display: flex; align-items: center; gap: 6px; }
+  .btn { height: 33px; padding: 0 13px; border: 1px solid transparent; border-radius: 8px; font-size: 11.5px; font-weight: 600; }
+  .btn.ghost { color: var(--muted); background: transparent; }
+  .btn.ghost:hover { color: var(--ink); background: rgba(21,24,30,.04); }
+  .btn.primary { color: #fff; background: linear-gradient(180deg, #4f86ff, var(--blue)); box-shadow: 0 4px 12px rgba(47,107,255,.25), inset 0 1px 0 rgba(255,255,255,.2); }
+  .btn.primary:hover { background: linear-gradient(180deg, #5c8fff, var(--blue-deep)); }
+
+  .bottom { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
+  .card { padding: 18px 20px; border-radius: 16px; border: 1px solid rgba(255,255,255,.74); background: rgba(255,255,255,.36); }
+  .eyebrow { color: var(--blue-deep); font-size: 10px; font-weight: 650; letter-spacing: .015em; margin-bottom: 6px; }
+  h3 { margin: 0; font-size: 14px; font-weight: 650; letter-spacing: -.01em; }
+  .card p { margin: 5px 0 0; color: var(--muted); font-size: 11px; line-height: 1.55; }
+  .norm-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 14px; }
+  .switch { position: relative; flex: 0 0 auto; width: 42px; height: 25px; padding: 3px; border: 0; border-radius: 999px; background: rgba(21,24,30,.16); transition: 160ms ease; }
+  .switch::after { content: ""; display: block; width: 19px; height: 19px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(20,28,45,.22); transition: 160ms ease; }
+  .switch.on { background: var(--blue); }
+  .switch.on::after { transform: translateX(17px); }
+  .level-row { display: flex; align-items: baseline; gap: 6px; margin-top: 10px; }
+  .level { font-size: 38px; line-height: .95; letter-spacing: -.055em; font-weight: 620; font-variant-numeric: tabular-nums; }
+  .level-unit { color: var(--faint); font-size: 11px; }
+  .range { -webkit-appearance: none; appearance: none; width: 100%; height: 17px; margin: 9px 0 0; background: transparent; }
+  .range::-webkit-slider-runnable-track { height: 4px; border-radius: 4px; background: linear-gradient(90deg, var(--blue) 0 9%, rgba(21,24,30,.09) 9% 100%); }
+  .range::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; margin-top: -6px; border-radius: 50%; background: #fff; border: 1px solid rgba(21,24,30,.16); box-shadow: 0 2px 6px rgba(20,28,45,.18); }
+  .scale { display: flex; justify-content: space-between; color: var(--faint); font-family: var(--mono); font-size: 9px; }
+  .status-card { display: flex; flex-direction: column; }
+  .status-line { display: flex; align-items: center; justify-content: space-between; margin-top: 13px; }
+  .status-chip { display: inline-flex; align-items: center; gap: 6px; color: var(--green); font-size: 11px; font-weight: 600; }
+  .status-chip .dot { width: 6px; height: 6px; }
+  .spec { display: grid; grid-template-columns: 1fr auto; gap: 7px 16px; margin: 12px 0 0; font-size: 11px; }
+  .spec dt { color: var(--faint); }
+  .spec dd { margin: 0; color: var(--ink-2); font-family: var(--mono); font-size: 10.5px; }
+  .battery { display: flex; align-items: center; gap: 9px; margin-top: auto; padding-top: 12px; border-top: 1px solid var(--line); }
+  .battery .bar { flex: 1; height: 4px; border-radius: 4px; background: rgba(21,24,30,.08); overflow: hidden; }
+  .battery .bar span { display: block; width: 98%; height: 100%; border-radius: inherit; background: var(--green); }
+  .battery b { font-family: var(--mono); font-size: 10px; font-weight: 500; color: var(--ink-2); }
+
+  @media (max-width: 980px) {
+    .app { grid-template-columns: 1fr; padding: 9px; }
+    .rail { flex-direction: row; align-items: center; padding: 10px 12px; }
+    .brand { padding: 0 15px 0 4px; }
+    .nav { display: flex; }
+    .nav a { padding: 0 8px; }
+    .nav a span { display: none; }
+    .rail-foot { display: none; }
+    .content { padding: 20px 18px; }
+    .bottom { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="rail">
+    <div class="brand"><b>SAIL</b><span>STUDIO</span></div>
+    <nav class="nav" aria-label="主导航">
+      <a href="#">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M4 14v-2a8 8 0 0 1 16 0v2"/><path d="M4 14h3v5H5a1 1 0 0 1-1-1zM20 14h-3v5h2a1 1 0 0 0 1-1z"/></svg>
+        <span>设备</span>
+      </a>
+      <a class="active" href="#">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2.2"/><circle cx="8" cy="17" r="2.2"/></svg>
+        <span>声音</span>
+      </a>
+      <a href="#">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><rect x="8" y="3.5" width="8" height="12" rx="4"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3M9 21h6"/></svg>
+        <span>麦克风</span>
+      </a>
+      <a href="#">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="12" cy="12" r="3.1"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.3 2.3-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-3.2v-.2a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L6.1 17l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.6-1H4.7v-3.2h.2a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L6.1 8l2.3-2.3.1.1a1.7 1.7 0 0 0 1.9.3 1.7 1.7 0 0 0 1-1.6v-.2h3.2v.2a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 8l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.2v3.2H21a1.7 1.7 0 0 0-1.6 1z"/></svg>
+        <span>设置</span>
+      </a>
+    </nav>
+    <div class="rail-foot">
+      <div class="device"><span class="dot"></span> BlackShark V2 HS</div>
+      <div class="meta">有线 · <span class="mono">98%</span> · 充电中<br><span class="mono">v1.6.11.0</span></div>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="topbar">
+      <div class="trail">声音 <span>›</span> <b>均衡器</b></div>
+      <span class="thx"><svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M3 8.3 6.2 11.7 13 4.5"/></svg> THX 已连接</span>
+    </div>
+
+    <div class="content">
+      <div class="title-row">
+        <div>
+          <h1>声音</h1>
+          <p class="subtitle">为这副耳机调出你想要的空间和力度。每个频段都能直接输入数值，不必和细小的滑杆较劲。</p>
+        </div>
+        <div class="seg" role="group" aria-label="编辑模式">
+          <button type="button">曲线</button>
+          <button type="button" class="on">精确</button>
+        </div>
+      </div>
+
+      <section class="panel" aria-labelledby="eq-title">
+        <div class="panel-head">
+          <div>
+            <h2 id="eq-title">均衡器</h2>
+            <p>拖动曲线，或直接输入 <b>dB</b> 值。</p>
+          </div>
+          <div class="presets" role="group" aria-label="均衡器预设">
+            <button type="button" class="on">游戏</button>
+            <button type="button">音乐</button>
+            <button type="button">电影</button>
+            <button type="button">自定义</button>
+          </div>
+        </div>
+
+        <div class="graph" aria-label="均衡器曲线">
+          <span class="unit-note">−12 dB / +12 dB</span>
+          <span class="axis" style="top:8%">+12</span>
+          <span class="axis" style="top:29%">+6</span>
+          <span class="axis" style="top:50%">0</span>
+          <span class="axis" style="top:71%">−6</span>
+          <span class="axis" style="top:92%">−12</span>
+          <svg viewBox="0 0 100 100" preserveAspectRatio="none" role="img" aria-label="当前均衡器曲线">
+            <defs>
+              <linearGradient id="wash" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" stop-color="#4e85ff" stop-opacity=".19"/>
+                <stop offset="1" stop-color="#4e85ff" stop-opacity="0"/>
+              </linearGradient>
+            </defs>
+            <g stroke="rgba(21,24,30,.075)" stroke-width=".35" vector-effect="non-scaling-stroke">
+              <line x1="0" y1="8" x2="100" y2="8"/>
+              <line x1="0" y1="29" x2="100" y2="29"/>
+              <line x1="0" y1="50" x2="100" y2="50" stroke="rgba(21,24,30,.15)"/>
+              <line x1="0" y1="71" x2="100" y2="71"/>
+              <line x1="0" y1="92" x2="100" y2="92"/>
+            </g>
+            <polygon points="0,46.7 11.1,66.7 22.2,60 33.3,50 44.4,46.7 55.5,46.7 66.6,46.7 77.7,46.7 88.8,46.7 100,60 100,100 0,100" fill="url(#wash)"/>
+            <polyline points="0,46.7 11.1,66.7 22.2,60 33.3,50 44.4,46.7 55.5,46.7 66.6,46.7 77.7,46.7 88.8,46.7 100,60" fill="none" stroke="#2f6bff" stroke-width="1.5" vector-effect="non-scaling-stroke" stroke-linecap="round" stroke-linejoin="round"/>
+            <g fill="#2f6bff" stroke="#fff" stroke-width=".8" vector-effect="non-scaling-stroke">
+              <circle cx="0" cy="46.7" r=".9"/><circle cx="11.1" cy="66.7" r=".9"/><circle cx="22.2" cy="60" r=".9"/>
+              <circle cx="33.3" cy="50" r=".9"/><circle cx="44.4" cy="46.7" r=".9"/><circle cx="55.5" cy="46.7" r=".9"/>
+              <circle cx="66.6" cy="46.7" r=".9"/><circle cx="77.7" cy="46.7" r=".9"/><circle cx="88.8" cy="46.7" r=".9"/>
+              <circle cx="100" cy="60" r=".9"/>
+            </g>
+          </svg>
+        </div>
+
+        <div class="bands">
+          <div class="band"><div class="gain"><button type="button" aria-label="31 Hz 减 1 dB">−</button><input aria-label="31 Hz 增益" value="+1" inputmode="numeric"><button type="button" aria-label="31 Hz 加 1 dB">+</button></div><div class="fader" style="--p:54.2"><span class="fill" style="top:50%;height:4.2%"></span><span class="zero"></span><span class="thumb"></span></div><span class="freq">31<span>Hz</span></span></div>
+          <div class="band"><div class="gain"><button type="button" aria-label="63 Hz 减 1 dB">−</button><input aria-label="63 Hz 增益" value="−5" inputmode="numeric"><button type="button" aria-label="63 Hz 加 1 dB">+</button></div><div class="fader" style="--p:29.2"><span class="fill" style="top:29.2%;height:20.8%"></span><span class="zero"></span><span class="thumb"></span></div><span class="freq">63<span>Hz</span></span></div>
+          <div class="band"><div class="gain"><button type="button" aria-label="125 Hz 减 1 dB">−</button><input aria-label="125 Hz 增益" value="−3" inputmode="numeric"><button type="button" aria-label="125 Hz 加 1 dB">+</button></div><div class="fader" style="--p:37.5"><span class="fill" style="top:37.5%;height:12.5%"></span><span class="zero"></span><span class="thumb"></span></div><span class="freq">125<span>Hz</span></span></div>
+          <div class="band active"><div class="gain"><button type="button" aria-label="250 Hz 减 1 dB">−</button><input aria-label="250 Hz 增益" value="0" inputmode="numeric"><button type="button" aria-label="250 Hz 加 1 dB">+</button></div><div class="fader" style="--p:50"><span class="fill" style="top:50%;height:0"></span><span class="zero"></span><span class="thumb"></span></div><span class="freq">250<span>Hz</span></span></div>
+          <div class="band"><div class="gain"><button type="button" aria-label="500 Hz 减 1 dB">−</button><input aria-label="500 Hz 增益" value="+1" inputmode="numeric"><button type="button" aria-label="500 Hz 加 1 dB">+</button></div><div class="fader" style="--p:54.2"><span class="fill" style="top:50%;height:4.2%"></span><span class="zero"></span><span class="thumb"></span></div><span class="freq">500<span>Hz</span></span></div>
+          <div class="band"><div class="gain"><button type="button" aria-label="1 kHz 减 1 dB">−</button><input aria-label="1 kHz 增益" value="+1" inputmode="numeric"><button type="button" aria-label="1 kHz 加 1 dB">+</button></div><div class="fader" style="--p:54.2"><span class="fill" style="top:50%;height:4.2%"></span><span class="zero"></span><span class="thumb"></span></div><span class="freq">1k<span>Hz</span></span></div>
+          <div class="band"><div class="gain"><button type="button" aria-label="2 kHz 减 1 dB">−</button><input aria-label="2 kHz 增益" value="+1" inputmode="numeric"><button type="button" aria-label="2 kHz 加 1 dB">+</button></div><div class="fader" style="--p:54.2"><span class="fill" style="top:50%;height:4.2%"></span><span class="zero"></span><span class="thumb"></span></div><span class="freq">2k<span>Hz</span></span></div>
+          <div class="band"><div class="gain"><button type="button" aria-label="4 kHz 减 1 dB">−</button><input aria-label="4 kHz 增益" value="+1" inputmode="numeric"><button type="button" aria-label="4 kHz 加 1 dB">+</button></div><div class="fader" style="--p:54.2"><span class="fill" style="top:50%;height:4.2%"></span><span class="zero"></span><span class="thumb"></span></div><span class="freq">4k<span>Hz</span></span></div>
+          <div class="band"><div class="gain"><button type="button" aria-label="8 kHz 减 1 dB">−</button><input aria-label="8 kHz 增益" value="+1" inputmode="numeric"><button type="button" aria-label="8 kHz 加 1 dB">+</button></div><div class="fader" style="--p:54.2"><span class="fill" style="top:50%;height:4.2%"></span><span class="zero"></span><span class="thumb"></span></div><span class="freq">8k<span>Hz</span></span></div>
+          <div class="band"><div class="gain"><button type="button" aria-label="16 kHz 减 1 dB">−</button><input aria-label="16 kHz 增益" value="−3" inputmode="numeric"><button type="button" aria-label="16 kHz 加 1 dB">+</button></div><div class="fader" style="--p:37.5"><span class="fill" style="top:37.5%;height:12.5%"></span><span class="zero"></span><span class="thumb"></span></div><span class="freq">16k<span>Hz</span></span></div>
+        </div>
+
+        <div class="panel-foot">
+          <div class="hint"><kbd>↑</kbd><kbd>↓</kbd> 微调 <span>·</span> 输入后按 <kbd>Enter</kbd> 写入 <span>·</span> 范围 −12 到 +12 dB</div>
+          <div class="actions"><button class="btn ghost" type="button">恢复平直</button><button class="btn primary" type="button">写入耳机</button></div>
+        </div>
+      </section>
+
+      <div class="bottom">
+        <section class="card" aria-labelledby="norm-title">
+          <div class="norm-row">
+            <div>
+              <div class="eyebrow">THX DRC</div>
+              <h3 id="norm-title">声音标准化</h3>
+              <p>把不同游戏的响度拉回同一条线。</p>
+            </div>
+            <button class="switch on" type="button" aria-label="开启声音标准化" aria-pressed="true"></button>
+          </div>
+          <div class="level-row"><span class="level">10</span><span class="level-unit">/ 100</span></div>
+          <input class="range" type="range" min="1" max="100" value="10" aria-label="声音标准化等级" />
+          <div class="scale"><span>1</span><span>100</span></div>
+        </section>
+
+        <section class="card status-card" aria-labelledby="status-title">
+          <div class="status-line">
+            <div><div class="eyebrow">连接</div><h3 id="status-title">耳机状态</h3></div>
+            <span class="status-chip"><span class="dot"></span> 充电中</span>
+          </div>
+          <dl class="spec"><dt>链路</dt><dd>有线 USB</dd><dt>电量</dt><dd>98%</dd><dt>固件</dt><dd>1.6.11.0</dd></dl>
+          <div class="battery"><span class="bar"><span></span></span><b>98%</b></div>
+        </section>
+      </div>
+    </div>
+  </main>
+</div>
+</body>
+</html>

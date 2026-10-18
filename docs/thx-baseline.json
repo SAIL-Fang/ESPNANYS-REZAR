@@ -1,0 +1,40 @@
+{
+  "schema": "sail.thx-baseline.v1",
+  "frozen_at": "2026-10-18T13:55:00+08:00",
+  "device": {
+    "model": "Razer BlackShark V2 HyperSpeed",
+    "vid": "0x1532",
+    "pids": ["0x0565", "0x056E"],
+    "firmware": "1.6.11.0"
+  },
+  "windows": {
+    "build": "22621"
+  },
+  "thx": {
+    "apo_version": "3.2.3.0",
+    "dll_name": "ThxV3Native_v1.1.42.1.dll",
+    "dll_sha256": "5DE7CBBCDB0DDB70E5622D6570FB2DEBB5186AE1182E693D4F212E5DF1EC835A",
+    "vssrv_version": "3.2.3.0",
+    "vssrv_sha256": "18CB84BE0E689020CBF37FCC9C5850D3EF80A7DFB78735A959BE2DCFB374CD45",
+    "driver_packages": [
+      { "published": "oem40.inf", "original": "thxrtapo.inf" },
+      { "published": "oem41.inf", "original": "thxrtscu.inf" },
+      { "published": "oem45.inf", "original": "thxrtsvc.inf" },
+      { "published": "oem46.inf", "original": "thxusbapo.inf" },
+      { "published": "oem48.inf", "original": "thxrtscu.inf" },
+      { "published": "oem49.inf", "original": "thxusbapo.inf" }
+    ],
+    "installer": "not_available"
+  },
+  "firmware_image": null,
+  "toolchain": {
+    "rust": "1.99.1",
+    "tauri": "2.12.4",
+    "svelte": "5.56.3"
+  },
+  "notes": [
+    "THX binaries are not in this repository; keep the private backup separately.",
+    "Firmware is version-only: no flashable image was present in the Synapse cache.",
+    "Use scripts/check-baseline.cmd to detect drift after Synapse/THX/Windows updates."
+  ]
+}

@@ -1,0 +1,3 @@
+[env]
+CRATE_CC_NO_DEFAULTS = "1"
+CFLAGS = "/MD /O2"
