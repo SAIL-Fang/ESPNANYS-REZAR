@@ -221,9 +221,10 @@ Synapse 滑杆的 **10 是前端组件的最小值**，不是 THX API 的下限�
    - HID：电量、固件、侧音、扬声器 EQ、自动关机；
    - THX：只做按需配置（用户打开麦克风页时才初始化），不做常驻音频处理。
 
-## 8. 未闭环
+## 8. 已实现 / 未闭环
 
-- 侧音 HID 音量 0–100 → 0–15 的完整映射（目前 50→7）。
-- 麦克风 EQ 单段拖动的 payload（预设已证明 10 值数组格式）。
-- 低音增强/人声清晰度/麦克风标准化/亮丽人声的等级滑杆实时值（API 和默认值已确认）。
+- **已实现**：`SetCaptureEQGains` 的 10 段拖动会写成 JSON 字符串 `[v0,...,v9]`，并先调用 `SetCaptureEQ(true)`；否则只写 gains 会被 THX 旁路。
+- **已实现**：噪声门（float dB）、降噪、标准化、亮丽人声、麦克风音量、`SetCapturePreview`、`SetCaptureSidetone` 都已通过真实 DLL 回读验证。
+- **已实现**：启动/读写前通过 `GetCaptureDevice` + `GetCaptureDeviceList` 绑定精确的 Razer BlackShark 麦克风，避免 Windows 默认麦克风不是耳机时写错设备。
+- 侧音 HID 音量 0–100 → 0–15 仍是线性换算（当前 50→7），精确曲线没有更多采样点。
 - 勿扰的 HID 写入帧（record `0x27` 已知，未实时抓写方向）。

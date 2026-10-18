@@ -148,10 +148,10 @@ Razer headset driver · Razer headset driver alternative · disable Razer Synaps
 | `sail_core` | ✅ | 64 字节帧、seq、checksum、命令/响应/事件；13 个 mock 测试 |
 | `sail_hid` | ✅ 实测 | `hidapi` 枚举 0xFF14、真实电量/固件/序列号 |
 | `sail_app` | ✅ | 应用编排、`Field` 部分成功快照、THX host 接缝；CLI/UI 共用 |
-| `sail_cli` | ✅ 实测 | `status` / `battery` / `sidetone` / `eq-preset` / `eq-gains` |
-| `sail_thx_bridge` | ✅ 实测 | 加载已安装 THX DLL；`verify`：写 1 → 回读 1 → 恢复 10 |
-| `sail_ui` | ✅ 首版 | Tauri 2 + Svelte 5；可直接拖曲线 / 输入 dB 的均衡器（改动自动写入）、声音标准化 1–100、立体声 / THX 空间音效切换、实时合成演示、默认输出检查、托盘常驻 |
-| 麦克风 THX 参数 | ⏳ | 噪声门/降噪/标准化/亮丽人声/麦克风 EQ 下一阶段 |
+| `sail_cli` | ✅ 实测 | `status` / `battery` / `sidetone` / `eq-preset` / `eq-gains` / `mic-*` |
+| `sail_thx_bridge` | ✅ 实测 | 加载已安装 THX DLL；render + capture EQ/噪声门/降噪/标准化/亮丽人声/预览/侧音 |
+| `sail_ui` | ✅ 首版 | Tauri 2 + Svelte 5；可直接拖曲线 / 输入 dB 的均衡器（改动自动写入）、声音标准化 1–100、立体声 / THX 空间音效切换、完整麦克风页、实时合成演示、默认输出检查、托盘常驻 |
+| 麦克风 THX 参数 | ✅ 实测 | 噪声门/降噪/标准化/亮丽人声/麦克风 EQ/麦克风音量/测试/侧音 |
 | 托盘设置 / 开机启动 | ⏳ | 托盘已可用；设置页常驻开关和开机启动下一阶段 |
 
 ### 应用分层
@@ -172,6 +172,8 @@ ui/src/lib         api.ts / device.svelte.ts / components/
 ![ESPNANYS-REZAR 声音页](captures/screenshots/sail-ui.png)
 
 ![默认输出阻断与切换](captures/screenshots/sail-route-gate.png)
+
+![ESPNANYS-REZAR 麦克风页](captures/screenshots/sail-mic.png)
 
 ![ESPNANYS-REZAR 演示页](captures/screenshots/sail-demo.png)
 
@@ -423,6 +425,7 @@ razer-blackshark-v2-hyperspeed/
 └─ captures/
    ├─ protocol.log            # Synapse 的 HID 原始日志（hex）
    ├─ screenshots/sail-ui.png # 首版 SAIL UI 截图
+   ├─ screenshots/sail-mic.png # 完整麦克风页
    ├─ screenshots/sail-demo.png # 实时合成空间音频演示
    ├─ THXDLL_V3CommonSubProcess.log
    ├─ ThxV3NativeSubProcess.log
@@ -469,12 +472,31 @@ THX 是挂在耳机音频 endpoint 上的 **Windows APO**（版本 3.2.3.0），
 | 功能 | 实现 |
 |---|---|
 | 扬声器均衡器预设/频段 | **HID `0x93` + `0x95`**，同时写 THX `SetRenderEQGains` |
-| 麦克风均衡器预设/频段 | **只走 THX `SetCaptureEQGains`**；HID `0x96` 返回 status 5 |
+| 麦克风均衡器预设/频段 | **只走 THX `SetCaptureEQGains`**；写入 JSON 10 值，`SetCaptureEQ(true)` 才会生效；HID `0x96` 返回 status 5 |
 | 声音标准化 | 只走 THX `SetRenderNormalization` / `Level`（DRC） |
-| 噪声门 | THX `SetCaptureVoiceGate` / `Level`；UI 1–5 → -60…-20 dB |
+| 噪声门 | THX `SetCaptureVoiceGate` / `SetCaptureVoiceGateLevel(float)`；UI 1–5 → -60…-20 dB |
 | 麦克风降噪 | THX `SetCaptureNoiseReduction` / `Level`；0–100 1:1 |
-| 音量标准化 / 亮丽人声 | THX `SetCaptureNormalization` / `SetCaptureVocalClarity` |
-| 侧音 | HID `0x98/0x99` + THX `SetStartCaptureStatus` / `SetCaptureSidetoneLevel` |
+| 音量标准化 / 亮丽人声 | THX `SetCaptureNormalization` / `SetCaptureVocalClarity` + `Level` |
+| 麦克风音量 | THX `SetCaptureVolumeBySystem`，0–100 1:1 |
+| 麦克风测试 | THX `SetCapturePreview` 开始/停止 |
+| 侧音 | HID `0x98/0x99` + THX `SetCaptureSidetone` / `SetCaptureSidetoneLevel` / `SetStartCaptureStatus` |
+
+THX 的 capture device 和 render endpoint 是分开记住的。`sail_thx` 在读写麦克风前会检查 `GetCaptureDevice`，如果当前不是 Razer 麦克风，就从 `GetCaptureDeviceList` 里选精确的 `Razer BlackShark` 并 `SetCaptureDevice`，避免把参数写到主板/USB 声卡麦克风上。
+
+CLI 对应命令：
+
+```powershell
+sail_cli mic-status
+sail_cli mic-gate on -40       # 或 off
+sail_cli mic-nr on 60          # 或 off
+sail_cli mic-norm on 55        # 或 off
+sail_cli mic-clarity on 55     # 或 off
+sail_cli mic-eq 2 4 6 7 7 7 7 6 4 2
+sail_cli mic-eq-toggle off
+sail_cli mic-volume 100
+sail_cli mic-preview on|off
+sail_cli mic-sidetone on|off
+```
 
 完整参数、预设数组和实测序列见 [docs/audio-features.md](docs/audio-features.md)，机器可读版见 [captures/audio-features.json](captures/audio-features.json)。
 
@@ -482,9 +504,10 @@ THX 是挂在耳机音频 endpoint 上的 **Windows APO**（版本 3.2.3.0），
 
 - 有线 `0x056E` 主动读取已修正：get 请求 offset 9 = `0x00`，set 请求 = `0x80`。响应里的 `0x80` 不能照抄到请求。事件缓存只作 timeout 兜底。
 - `0x96 Set Mic Preset EQ Index` 在 0x0565 无线接收器上返回 **status 5（not supported）**；可能有线 0x056E 才支持。
-- 侧音音量 `0x99` 的 UI 0–100 → 设备值映射尚未完全确定（UI 50 → 设备 7）。
+- 侧音音量 `0x99` 的 UI 0–100 → 设备值映射尚未完全确定（当前按 0–15 线性换算；UI 50 → 设备 7）。
 - 事件帧的校验和存在变体（请求/响应公式已稳定），解析事件不需要校验。
-- ~~THX C API 的完整函数签名未确认~~ 已实测确认：`DeviceInitialize` / `GetRenderDevice` / `SetDefaultRenderDevice` / `Get|SetRenderNormalization(bool)` / `Get|SetRenderNormalizationLevel(int)`；等级是 `int` 不是 `double`。见 [docs/thx.md](docs/thx.md) 第 4、11 节。
+- ~~THX C API 的完整函数签名未确认~~ 已实测确认：`DeviceInitialize` / `GetRenderDevice` / `SetDefaultRenderDevice` / `Get|SetRenderNormalization(bool)` / `Get|SetRenderNormalizationLevel(int)`；等级是 `int` 不是 `double`。Capture 侧已实测确认：`SetCaptureVoiceGateLevel` 是 `f32`，其余 level 是 `i32`，`SetCaptureEQGains` 接收 10 个值的 JSON 字符串。见 [docs/thx.md](docs/thx.md) 第 4、11 节。
+- THX 状态不再每 10 秒轮询；外部程序修改 THX 后需要点一次顶部「刷新」。这是为了避免 helper 每次调用 `SetDefaultRenderDevice` 打断音频。
 - “声音标准化有时调不动”已定位：不是 APO，而是 THX 服务 `VSSrv` 崩溃后未自动拉起，或服务重启后 `RazerAppEngine` 仍连着旧端口。`scripts\diagnose-thx.cmd` 可自动判断并修复。
 - 读取类命令（`status` / `probe`）是只读的；只有 `enable` / `level` / `verify` 会改动标准化状态。
 - 没有 Ghidra/IDA 原生反编译；HID 协议层已足够，不需要 `HID.node` 内部实现。

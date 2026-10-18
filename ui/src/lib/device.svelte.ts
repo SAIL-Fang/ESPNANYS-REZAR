@@ -115,6 +115,17 @@ export class DeviceStore {
     return this.run(() => api.setSidetone(enabled), enabled ? "侧音已开启" : "侧音已关闭");
   }
 
+  async setSidetoneVolume(value: number) {
+    return this.run(
+      () => api.setSidetoneVolume(Math.max(0, Math.min(15, Math.round(value)))),
+      `侧音音量 ${Math.round(value)}`
+    );
+  }
+
+  async micCommand(args: string[], notice: string) {
+    return this.run(() => api.micCommand(args), notice);
+  }
+
   async setEqPreset(preset: string, label: string) {
     return this.run(() => api.setEqPreset(preset), `${label} 预设已写入`);
   }

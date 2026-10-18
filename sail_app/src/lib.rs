@@ -167,6 +167,26 @@ pub fn eq_presets() -> Vec<EqPreset> {
     ]
 }
 
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CaptureSnapshot {
+    pub device: Option<String>,
+    pub voice_gate: Option<bool>,
+    pub voice_gate_db: Option<f32>,
+    pub noise_reduction: Option<bool>,
+    pub noise_reduction_level: Option<i32>,
+    pub normalization: Option<bool>,
+    pub normalization_level: Option<i32>,
+    pub vocal_clarity: Option<bool>,
+    pub vocal_clarity_level: Option<i32>,
+    pub volume: Option<i32>,
+    pub sidetone: Option<bool>,
+    pub sidetone_level: Option<i32>,
+    pub preview: Option<bool>,
+    pub eq_enabled: Option<bool>,
+    pub eq_gains: Option<Vec<f64>>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ThxSnapshot {
@@ -178,6 +198,8 @@ pub struct ThxSnapshot {
     pub dll: Option<String>,
     pub dll_version: Option<String>,
     pub abi: Option<String>,
+    #[serde(default)]
+    pub capture: Option<CaptureSnapshot>,
     pub error: Option<String>,
 }
 
@@ -192,6 +214,7 @@ impl ThxSnapshot {
             dll: None,
             dll_version: None,
             abi: None,
+            capture: None,
             error: Some(error),
         }
     }
@@ -229,6 +252,7 @@ pub trait ThxHost {
     fn set_level(&self, level: i32) -> Result<(), String>;
     fn set_enabled(&self, enabled: bool) -> Result<(), String>;
     fn set_spatial(&self, enabled: bool) -> Result<(), String>;
+    fn mic(&self, args: &[String]) -> Result<(), String>;
     fn verify(&self) -> Result<String, String>;
 }
 
@@ -295,6 +319,11 @@ impl ProcessThxHost {
             }
         }
     }
+
+    fn run_mic(&self, args: &[String]) -> Result<(), String> {
+        let borrowed: Vec<&str> = args.iter().map(String::as_str).collect();
+        self.run(&borrowed).map(|_| ())
+    }
 }
 
 impl ThxHost for ProcessThxHost {
@@ -321,6 +350,10 @@ impl ThxHost for ProcessThxHost {
     fn set_spatial(&self, enabled: bool) -> Result<(), String> {
         self.run(&["spatial", if enabled { "on" } else { "off" }])
             .map(|_| ())
+    }
+
+    fn mic(&self, args: &[String]) -> Result<(), String> {
+        self.run_mic(args)
     }
 
     fn verify(&self) -> Result<String, String> {
@@ -507,6 +540,14 @@ impl SailApp {
     pub fn verify_thx(&self) -> Result<String, SailError> {
         self.thx.verify().map_err(SailError::Thx)
     }
+
+    /// The microphone feature set is exposed through the same checked helper
+    /// command surface as the existing THX calls. Callers must pass one of the
+    /// `mic-*` commands understood by `sail_thx`; the helper validates every
+    /// range again.
+    pub fn mic_command(&self, args: &[String]) -> Result<(), SailError> {
+        self.thx.mic(args).map_err(SailError::Thx)
+    }
 }
 
 fn cached_event(transport: &HidTransport) -> Option<Event> {
@@ -637,6 +678,9 @@ mod tests {
         fn set_spatial(&self, _enabled: bool) -> Result<(), String> {
             Ok(())
         }
+        fn mic(&self, _args: &[String]) -> Result<(), String> {
+            Ok(())
+        }
         fn verify(&self) -> Result<String, String> {
             Ok("OK".into())
         }
@@ -663,6 +707,7 @@ mod tests {
                 dll: None,
                 dll_version: None,
                 abi: None,
+                capture: None,
                 error: None,
             },
         }));

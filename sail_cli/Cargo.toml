@@ -10,3 +10,4 @@ description = "SAIL command-line interface"
 sail_app = { path = "../sail_app" }
 sail_core = { path = "../sail_core" }
 sail_hid = { path = "../sail_hid" }
+serde_json = "1"

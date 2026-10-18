@@ -25,10 +25,25 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     }
     let command = args.first().map(String::as_str).unwrap_or("status");
     let json = args.iter().any(|value| value == "--json");
-    // Reading must not change user state: THX only accepts level writes after
-    // normalization has been enabled, so the write commands use the activating
-    // constructor and everything that only reports state stays passive.
-    let passive = matches!(command, "status" | "probe" | "spatial");
+    // Reading must not change user state: THX only accepts render level writes
+    // after render normalization has been enabled. Capture setters must never
+    // turn the speaker chain on, so every mic command stays passive too.
+    let passive = matches!(
+        command,
+        "status"
+            | "probe"
+            | "spatial"
+            | "mic-status"
+            | "mic-gate"
+            | "mic-nr"
+            | "mic-norm"
+            | "mic-clarity"
+            | "mic-eq"
+            | "mic-eq-toggle"
+            | "mic-volume"
+            | "mic-preview"
+            | "mic-sidetone"
+    );
     if command == "verify" {
         // Sample the real user state with a passive bridge first. The active
         // constructor enables normalization, so sampling through it can never
@@ -105,6 +120,70 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             }
             None => println!("{}", if bridge.get_spatial()? { "on" } else { "off" }),
         },
+        "mic-status" => {
+            let status = bridge.capture_status();
+            if json {
+                println!("{}", serde_json::to_string(&status)?);
+            } else {
+                println!("{status:#?}");
+            }
+        }
+        "mic-gate" => {
+            let enabled = parse_on_off(args.get(1).ok_or("mic-gate needs on|off")?)?;
+            let db = args.get(2).map(|value| value.parse::<f32>()).transpose()?;
+            bridge.set_capture_voice_gate(enabled, db)?;
+            println!("mic-gate {}", if enabled { "on" } else { "off" });
+        }
+        "mic-nr" => {
+            let enabled = parse_on_off(args.get(1).ok_or("mic-nr needs on|off")?)?;
+            let level = args.get(2).map(|value| value.parse::<i32>()).transpose()?;
+            bridge.set_capture_noise_reduction(enabled, level)?;
+            println!("mic-nr {}", if enabled { "on" } else { "off" });
+        }
+        "mic-norm" => {
+            let enabled = parse_on_off(args.get(1).ok_or("mic-norm needs on|off")?)?;
+            let level = args.get(2).map(|value| value.parse::<i32>()).transpose()?;
+            bridge.set_capture_normalization(enabled, level)?;
+            println!("mic-norm {}", if enabled { "on" } else { "off" });
+        }
+        "mic-clarity" => {
+            let enabled = parse_on_off(args.get(1).ok_or("mic-clarity needs on|off")?)?;
+            let level = args.get(2).map(|value| value.parse::<i32>()).transpose()?;
+            bridge.set_capture_vocal_clarity(enabled, level)?;
+            println!("mic-clarity {}", if enabled { "on" } else { "off" });
+        }
+        "mic-eq" => {
+            let values = &args[1..];
+            if values.len() != 10 {
+                return Err("mic-eq needs 10 dB values".into());
+            }
+            let mut gains = [0.0f64; 10];
+            for (index, value) in values.iter().enumerate() {
+                gains[index] = value.parse()?;
+            }
+            bridge.set_capture_eq_gains(&gains)?;
+            println!("mic-eq {}", serde_json::to_string(&gains)?);
+        }
+        "mic-eq-toggle" => {
+            let enabled = parse_on_off(args.get(1).ok_or("mic-eq-toggle needs on|off")?)?;
+            bridge.set_capture_eq(enabled)?;
+            println!("mic-eq {}", if enabled { "on" } else { "off" });
+        }
+        "mic-volume" => {
+            let level: i32 = args.get(1).ok_or("mic-volume needs 0..100")?.parse()?;
+            bridge.set_capture_volume(level)?;
+            println!("mic-volume {level}");
+        }
+        "mic-preview" => {
+            let enabled = parse_on_off(args.get(1).ok_or("mic-preview needs on|off")?)?;
+            bridge.set_capture_preview(enabled)?;
+            println!("mic-preview {}", if enabled { "on" } else { "off" });
+        }
+        "mic-sidetone" => {
+            let enabled = parse_on_off(args.get(1).ok_or("mic-sidetone needs on|off")?)?;
+            bridge.set_capture_sidetone(enabled)?;
+            println!("mic-sidetone {}", if enabled { "on" } else { "off" });
+        }
         other => return Err(format!("unknown command: {other}").into()),
     }
     Ok(())
@@ -128,10 +207,19 @@ fn print_json(status: &ThxStatus) -> Result<(), Box<dyn std::error::Error>> {
         "dll": status.dll.display().to_string(),
         "dllVersion": dll_version,
         "abi": "thx-v3",
+        "capture": status.capture,
         "error": null
     });
     println!("{}", serde_json::to_string(&value)?);
     Ok(())
+}
+
+fn parse_on_off(value: &str) -> Result<bool, Box<dyn std::error::Error>> {
+    match value {
+        "on" => Ok(true),
+        "off" => Ok(false),
+        _ => Err("expected on|off".into()),
+    }
 }
 
 /// Prove the 1..100 range is accepted by the DLL, not just by the Razer UI.

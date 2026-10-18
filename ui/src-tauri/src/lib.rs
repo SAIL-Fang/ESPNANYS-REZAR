@@ -53,6 +53,34 @@ async fn set_sidetone(enabled: bool) -> Result<(), String> {
 }
 
 #[tauri::command]
+async fn set_sidetone_volume(value: u8) -> Result<(), String> {
+    blocking(move || {
+        app()
+            .set_sidetone_volume(value)
+            .map_err(|error| error.to_string())
+    })
+    .await
+}
+
+#[tauri::command]
+async fn mic_command(args: Vec<String>) -> Result<(), String> {
+    if args.first().map(String::as_str).unwrap_or("") != "mic-status"
+        && !args
+            .first()
+            .map(|value| value.starts_with("mic-"))
+            .unwrap_or(false)
+    {
+        return Err("mic_command only accepts mic-* commands".into());
+    }
+    blocking(move || {
+        app()
+            .mic_command(&args)
+            .map_err(|error| error.to_string())
+    })
+    .await
+}
+
+#[tauri::command]
 async fn set_eq_preset(preset: String) -> Result<(), String> {
     blocking(move || {
         app()
@@ -187,6 +215,8 @@ pub fn run() {
             get_status,
             get_eq_presets,
             set_sidetone,
+            set_sidetone_volume,
+            mic_command,
             set_eq_preset,
             set_eq_gains,
             get_thx_status,

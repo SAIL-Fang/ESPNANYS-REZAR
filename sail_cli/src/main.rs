@@ -93,6 +93,24 @@ fn run(mut args: Vec<String>) -> Result<(), Box<dyn std::error::Error>> {
             println!("default audio output switched");
             return Ok(());
         }
+        "mic-status" if pid.is_none() => {
+            let capture = SailApp::new().thx_snapshot().capture;
+            println!(
+                "{}",
+                serde_json::to_string(&capture).map_err(std::io::Error::other)?
+            );
+            return Ok(());
+        }
+        "mic-gate" | "mic-nr" | "mic-norm" | "mic-clarity" | "mic-eq" | "mic-eq-toggle"
+        | "mic-volume" | "mic-preview" | "mic-sidetone"
+            if pid.is_none() =>
+        {
+            SailApp::new()
+                .mic_command(&args)
+                .map_err(std::io::Error::other)?;
+            println!("{command} ok");
+            return Ok(());
+        }
         _ => {}
     }
 
@@ -198,6 +216,16 @@ Commands:
   eq-preset game|music|cinema|custom|7|8|9|255
   eq-gains v0 ... v9         ten signed dB values
   audio-default [endpoint-id] switch default render device (headset if omitted)
+  mic-status                 THX microphone capture state as JSON
+  mic-gate on|off [db]       noise gate, db -60..-20
+  mic-nr on|off [0..100]     microphone noise reduction
+  mic-norm on|off [1..100]   microphone volume normalization
+  mic-clarity on|off [0..100] vocal clarity
+  mic-eq v0 ... v9           ten capture EQ dB values
+  mic-eq-toggle on|off       enable/disable capture EQ
+  mic-volume 0..100          system microphone volume via THX
+  mic-preview on|off          THX microphone preview
+  mic-sidetone on|off         THX capture sidetone chain
   watch [--count N]          print device events
 
 Examples:

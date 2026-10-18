@@ -23,6 +23,7 @@
 
 #![cfg(windows)]
 
+use serde::Serialize;
 use std::ffi::{c_char, c_int, c_void, CStr, CString};
 use std::fmt;
 use std::os::windows::ffi::OsStrExt;
@@ -38,6 +39,32 @@ type FnSetLevel = unsafe extern "system" fn(*const c_char, c_int) -> bool;
 type FnGetLevel = unsafe extern "system" fn(*const c_char) -> c_int;
 type FnPtr1 = unsafe extern "system" fn(*const c_char) -> *mut c_char;
 type FnList = unsafe extern "system" fn() -> *mut c_char;
+type FnF32_1 = unsafe extern "system" fn(*const c_char) -> f32;
+type FnF32_2 = unsafe extern "system" fn(*const c_char, f32) -> bool;
+type FnStr2 = unsafe extern "system" fn(*const c_char, *const c_char) -> bool;
+
+/// Capture-side THX state. Every field is optional because an older THX
+/// build may not export one of the getters; a missing field must not hide the
+/// other controls.
+#[derive(Debug, Clone, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CaptureStatus {
+    pub device: Option<String>,
+    pub voice_gate: Option<bool>,
+    pub voice_gate_db: Option<f32>,
+    pub noise_reduction: Option<bool>,
+    pub noise_reduction_level: Option<i32>,
+    pub normalization: Option<bool>,
+    pub normalization_level: Option<i32>,
+    pub vocal_clarity: Option<bool>,
+    pub vocal_clarity_level: Option<i32>,
+    pub volume: Option<i32>,
+    pub sidetone: Option<bool>,
+    pub sidetone_level: Option<i32>,
+    pub preview: Option<bool>,
+    pub eq_enabled: Option<bool>,
+    pub eq_gains: Option<Vec<f64>>,
+}
 
 /// Level writes are applied asynchronously by the THX APO; a write issued too
 /// early is rejected instead of queued. Five attempts with short sleeps cover
@@ -88,6 +115,7 @@ pub struct ThxStatus {
     pub enabled: Option<bool>,
     pub level: Option<i32>,
     pub spatial_enabled: Option<bool>,
+    pub capture: CaptureStatus,
 }
 
 pub struct ThxBridge {
@@ -318,6 +346,7 @@ impl ThxBridge {
             enabled: self.get_enabled().ok(),
             level: self.get_level().ok(),
             spatial_enabled: self.get_spatial().ok(),
+            capture: self.capture_status(),
         })
     }
 
@@ -342,6 +371,395 @@ impl ThxBridge {
         Err(ThxError::Status(
             "SetRenderSpatialProcessing returned false".into(),
         ))
+    }
+
+    // ------------------------------------------------------------------
+    // Capture / microphone
+    // ------------------------------------------------------------------
+
+    fn capture_bool(&self, name: &[u8]) -> Result<bool, ThxError> {
+        let f: FnBool1 = unsafe { self.sym(name)? };
+        Ok(unsafe { f(self.container.as_ptr()) })
+    }
+
+    fn capture_int(&self, name: &[u8]) -> Result<i32, ThxError> {
+        let f: FnGetLevel = unsafe { self.sym(name)? };
+        Ok(unsafe { f(self.container.as_ptr()) })
+    }
+
+    fn capture_f32(&self, name: &[u8]) -> Result<f32, ThxError> {
+        let f: FnF32_1 = unsafe { self.sym(name)? };
+        Ok(unsafe { f(self.container.as_ptr()) })
+    }
+
+    fn capture_set_bool(
+        &self,
+        set_name: &[u8],
+        get_name: &[u8],
+        enabled: bool,
+    ) -> Result<(), ThxError> {
+        let f: FnBool2 = unsafe { self.sym(set_name)? };
+        for attempt in 0..RETRIES {
+            if unsafe { f(self.container.as_ptr(), enabled) } {
+                return Ok(());
+            }
+            if self
+                .capture_bool(get_name)
+                .map(|v| v == enabled)
+                .unwrap_or(false)
+            {
+                return Ok(());
+            }
+            if attempt + 1 < RETRIES {
+                std::thread::sleep(std::time::Duration::from_millis(RETRY_DELAY_MS));
+            }
+        }
+        Err(ThxError::Status(format!(
+            "{} returned false",
+            String::from_utf8_lossy(set_name).trim_end_matches('\0')
+        )))
+    }
+
+    fn capture_set_int(
+        &self,
+        set_name: &[u8],
+        get_name: &[u8],
+        value: i32,
+    ) -> Result<(), ThxError> {
+        let f: FnSetLevel = unsafe { self.sym(set_name)? };
+        for attempt in 0..RETRIES {
+            if unsafe { f(self.container.as_ptr(), value) } {
+                return Ok(());
+            }
+            if self
+                .capture_int(get_name)
+                .map(|v| v == value)
+                .unwrap_or(false)
+            {
+                return Ok(());
+            }
+            if attempt + 1 < RETRIES {
+                std::thread::sleep(std::time::Duration::from_millis(RETRY_DELAY_MS));
+            }
+        }
+        Err(ThxError::Status(format!(
+            "{} returned false",
+            String::from_utf8_lossy(set_name).trim_end_matches('\0')
+        )))
+    }
+
+    fn capture_set_f32(
+        &self,
+        set_name: &[u8],
+        get_name: &[u8],
+        value: f32,
+    ) -> Result<(), ThxError> {
+        let f: FnF32_2 = unsafe { self.sym(set_name)? };
+        for attempt in 0..RETRIES {
+            if unsafe { f(self.container.as_ptr(), value) } {
+                return Ok(());
+            }
+            if self
+                .capture_f32(get_name)
+                .map(|v| (v - value).abs() < 0.01)
+                .unwrap_or(false)
+            {
+                return Ok(());
+            }
+            if attempt + 1 < RETRIES {
+                std::thread::sleep(std::time::Duration::from_millis(RETRY_DELAY_MS));
+            }
+        }
+        Err(ThxError::Status(format!(
+            "{} returned false",
+            String::from_utf8_lossy(set_name).trim_end_matches('\0')
+        )))
+    }
+
+    pub fn set_capture_voice_gate(&self, enabled: bool, db: Option<f32>) -> Result<(), ThxError> {
+        self.ensure_capture_device()?;
+        self.capture_set_bool(b"SetCaptureVoiceGate\0", b"GetCaptureVoiceGate\0", enabled)?;
+        if enabled {
+            if let Some(db) = db {
+                if !(-60.0..=-20.0).contains(&db) {
+                    return Err(ThxError::Status(format!(
+                        "voice gate must be -60..-20 dB, got {db}"
+                    )));
+                }
+                self.capture_set_f32(
+                    b"SetCaptureVoiceGateLevel\0",
+                    b"GetCaptureVoiceGateLevel\0",
+                    db,
+                )?;
+            }
+        }
+        Ok(())
+    }
+
+    pub fn set_capture_noise_reduction(
+        &self,
+        enabled: bool,
+        level: Option<i32>,
+    ) -> Result<(), ThxError> {
+        self.ensure_capture_device()?;
+        self.capture_set_bool(
+            b"SetCaptureNoiseReduction\0",
+            b"GetCaptureNoiseReduction\0",
+            enabled,
+        )?;
+        if enabled {
+            if let Some(level) = level {
+                validate_capture_level("noise reduction", level, 0, 100)?;
+                self.capture_set_int(
+                    b"SetCaptureNoiseReductionLevel\0",
+                    b"GetCaptureNoiseReductionLevel\0",
+                    level,
+                )?;
+            }
+        }
+        Ok(())
+    }
+
+    pub fn set_capture_normalization(
+        &self,
+        enabled: bool,
+        level: Option<i32>,
+    ) -> Result<(), ThxError> {
+        self.ensure_capture_device()?;
+        self.capture_set_bool(
+            b"SetCaptureNormalization\0",
+            b"GetCaptureNormalization\0",
+            enabled,
+        )?;
+        if enabled {
+            if let Some(level) = level {
+                validate_capture_level("capture normalization", level, 1, 100)?;
+                self.capture_set_int(
+                    b"SetCaptureNormalizationLevel\0",
+                    b"GetCaptureNormalizationLevel\0",
+                    level,
+                )?;
+            }
+        }
+        Ok(())
+    }
+
+    pub fn set_capture_vocal_clarity(
+        &self,
+        enabled: bool,
+        level: Option<i32>,
+    ) -> Result<(), ThxError> {
+        self.ensure_capture_device()?;
+        self.capture_set_bool(
+            b"SetCaptureVocalClarity\0",
+            b"GetCaptureVocalClarity\0",
+            enabled,
+        )?;
+        if enabled {
+            if let Some(level) = level {
+                validate_capture_level("vocal clarity", level, 0, 100)?;
+                self.capture_set_int(
+                    b"SetCaptureVocalClarityLevel\0",
+                    b"GetCaptureVocalClarityLevel\0",
+                    level,
+                )?;
+            }
+        }
+        Ok(())
+    }
+
+    pub fn set_capture_volume(&self, level: i32) -> Result<(), ThxError> {
+        validate_capture_level("capture volume", level, 0, 100)?;
+        self.ensure_capture_device()?;
+        self.capture_set_int(
+            b"SetCaptureVolumeBySystem\0",
+            b"GetCaptureVolumeBySystem\0",
+            level,
+        )
+    }
+
+    pub fn set_capture_preview(&self, enabled: bool) -> Result<(), ThxError> {
+        self.ensure_capture_device()?;
+        self.capture_set_bool(b"SetCapturePreview\0", b"GetCapturePreview\0", enabled)
+    }
+
+    pub fn set_capture_sidetone(&self, enabled: bool) -> Result<(), ThxError> {
+        self.ensure_capture_device()?;
+        // `Get/SetStartCaptureStatus` controls the THX capture chain, while
+        // `Get/SetCaptureSidetone` is the mic-monitor flag the hardware UI
+        // exposes. Keep both in sync; the HID 0x98/0x99 path is still the
+        // authoritative hardware switch.
+        self.capture_set_bool(b"SetCaptureSidetone\0", b"GetCaptureSidetone\0", enabled)?;
+        if enabled {
+            self.capture_set_int(
+                b"SetCaptureSidetoneLevel\0",
+                b"GetCaptureSidetoneLevel\0",
+                1582,
+            )?;
+        }
+        let _ = self.capture_set_bool(
+            b"SetStartCaptureStatus\0",
+            b"GetStartCaptureStatus\0",
+            enabled,
+        );
+        Ok(())
+    }
+
+    pub fn set_capture_eq(&self, enabled: bool) -> Result<(), ThxError> {
+        self.ensure_capture_device()?;
+        self.capture_set_bool(b"SetCaptureEQ\0", b"GetCaptureEQ\0", enabled)
+    }
+
+    pub fn set_capture_eq_gains(&self, gains: &[f64; 10]) -> Result<(), ThxError> {
+        self.ensure_capture_device()?;
+        // Razer enables the EQ separately; writing gains alone leaves it
+        // bypassed. The UI treats applying a curve as "use this curve".
+        self.capture_set_bool(b"SetCaptureEQ\0", b"GetCaptureEQ\0", true)?;
+        let json = serde_json::to_string(gains)
+            .map_err(|error| ThxError::Status(format!("serialize capture EQ: {error}")))?;
+        let json = CString::new(json).map_err(|e| ThxError::Status(e.to_string()))?;
+        let f: FnStr2 = unsafe { self.sym(b"SetCaptureEQGains\0")? };
+        if unsafe { f(self.container.as_ptr(), json.as_ptr()) } {
+            Ok(())
+        } else {
+            Err(ThxError::Status("SetCaptureEQGains returned false".into()))
+        }
+    }
+
+    fn capture_device_json(&self) -> Result<Option<String>, ThxError> {
+        let f: FnPtr1 = unsafe { self.sym(b"GetCaptureDevice\0")? };
+        let ptr = unsafe { f(self.container.as_ptr()) };
+        if ptr.is_null() {
+            return Ok(None);
+        }
+        Ok(Some(
+            unsafe { CStr::from_ptr(ptr) }
+                .to_string_lossy()
+                .into_owned(),
+        ))
+    }
+
+    fn capture_device_list_json(&self) -> Result<Option<String>, ThxError> {
+        let f: FnPtr1 = unsafe { self.sym(b"GetCaptureDeviceList\0")? };
+        let ptr = unsafe { f(self.container.as_ptr()) };
+        if ptr.is_null() {
+            return Ok(None);
+        }
+        Ok(Some(
+            unsafe { CStr::from_ptr(ptr) }
+                .to_string_lossy()
+                .into_owned(),
+        ))
+    }
+
+    fn set_capture_device(&self, device_id: &str) -> Result<(), ThxError> {
+        let id = CString::new(device_id).map_err(|e| ThxError::Status(e.to_string()))?;
+        let f: FnStr2 = unsafe { self.sym(b"SetCaptureDevice\0")? };
+        if unsafe { f(self.container.as_ptr(), id.as_ptr()) } {
+            Ok(())
+        } else {
+            Err(ThxError::Status("SetCaptureDevice returned false".into()))
+        }
+    }
+
+    /// THX remembers a capture device independently of the render endpoint.
+    /// If Windows changed the default microphone, read/write the Razer mic
+    /// explicitly instead of silently configuring another input.
+    fn ensure_capture_device(&self) -> Result<(), ThxError> {
+        let current = self
+            .capture_device_json()?
+            .and_then(|json| json_string(&json, "name"));
+        if current
+            .as_deref()
+            .map(|name| {
+                let name = name.to_ascii_lowercase();
+                name.contains("razer") && name.contains("blackshark")
+            })
+            .unwrap_or(false)
+        {
+            return Ok(());
+        }
+        let Some(list) = self.capture_device_list_json()? else {
+            return Err(ThxError::Status("no THX capture device list".into()));
+        };
+        let value: serde_json::Value = serde_json::from_str(&list)
+            .map_err(|e| ThxError::Status(format!("parse capture devices: {e}")))?;
+        let Some(devices) = value.get("devices").and_then(|v| v.as_array()) else {
+            return Err(ThxError::Status(
+                "capture device list has no devices".into(),
+            ));
+        };
+        let id = devices
+            .iter()
+            .find(|device| {
+                device
+                    .get("name")
+                    .and_then(|name| name.as_str())
+                    .map(|name| {
+                        let name = name.to_ascii_lowercase();
+                        name.contains("razer") && name.contains("blackshark")
+                    })
+                    .unwrap_or(false)
+            })
+            .and_then(|device| device.get("id"))
+            .and_then(|id| id.as_str());
+        let Some(id) = id else {
+            return Err(ThxError::Status(
+                "Razer BlackShark microphone is not listed by THX".into(),
+            ));
+        };
+        self.set_capture_device(id)?;
+        Ok(())
+    }
+
+    fn capture_eq_gains(&self) -> Result<Option<Vec<f64>>, ThxError> {
+        let f: FnPtr1 = unsafe { self.sym(b"GetCaptureEQGains\0")? };
+        let ptr = unsafe { f(self.container.as_ptr()) };
+        if ptr.is_null() {
+            return Ok(None);
+        }
+        let json = unsafe { CStr::from_ptr(ptr) }.to_string_lossy();
+        let value: serde_json::Value = match serde_json::from_str(&json) {
+            Ok(value) => value,
+            Err(_) => return Ok(None),
+        };
+        let array = value
+            .as_array()
+            .or_else(|| value.get("eq").and_then(|v| v.as_array()))
+            .or_else(|| value.get("gains").and_then(|v| v.as_array()));
+        Ok(array.map(|values| {
+            values
+                .iter()
+                .filter_map(|value| value.as_f64())
+                .take(10)
+                .collect()
+        }))
+    }
+
+    pub fn capture_status(&self) -> CaptureStatus {
+        let _ = self.ensure_capture_device();
+        let device = self
+            .capture_device_json()
+            .ok()
+            .flatten()
+            .and_then(|json| json_string(&json, "name"));
+        CaptureStatus {
+            device,
+            voice_gate: self.capture_bool(b"GetCaptureVoiceGate\0").ok(),
+            voice_gate_db: self.capture_f32(b"GetCaptureVoiceGateLevel\0").ok(),
+            noise_reduction: self.capture_bool(b"GetCaptureNoiseReduction\0").ok(),
+            noise_reduction_level: self.capture_int(b"GetCaptureNoiseReductionLevel\0").ok(),
+            normalization: self.capture_bool(b"GetCaptureNormalization\0").ok(),
+            normalization_level: self.capture_int(b"GetCaptureNormalizationLevel\0").ok(),
+            vocal_clarity: self.capture_bool(b"GetCaptureVocalClarity\0").ok(),
+            vocal_clarity_level: self.capture_int(b"GetCaptureVocalClarityLevel\0").ok(),
+            volume: self.capture_int(b"GetCaptureVolumeBySystem\0").ok(),
+            sidetone: self.capture_bool(b"GetCaptureSidetone\0").ok(),
+            sidetone_level: self.capture_int(b"GetCaptureSidetoneLevel\0").ok(),
+            preview: self.capture_bool(b"GetCapturePreview\0").ok(),
+            eq_enabled: self.capture_bool(b"GetCaptureEQ\0").ok(),
+            eq_gains: self.capture_eq_gains().ok().flatten(),
+        }
     }
 
     fn render_device_json(&self) -> Result<Option<String>, ThxError> {
@@ -379,6 +797,16 @@ fn validate_level(level: i32) -> Result<(), ThxError> {
         Ok(())
     } else {
         Err(ThxError::InvalidLevel(level))
+    }
+}
+
+fn validate_capture_level(name: &str, level: i32, min: i32, max: i32) -> Result<(), ThxError> {
+    if (min..=max).contains(&level) {
+        Ok(())
+    } else {
+        Err(ThxError::Status(format!(
+            "{name} must be {min}..{max}, got {level}"
+        )))
     }
 }
 
@@ -501,5 +929,29 @@ mod tests {
             validate_level(101),
             Err(ThxError::InvalidLevel(101))
         ));
+    }
+
+    #[test]
+    fn capture_level_ranges_are_checked() {
+        assert!(validate_capture_level("nr", 0, 0, 100).is_ok());
+        assert!(validate_capture_level("nr", 100, 0, 100).is_ok());
+        assert!(validate_capture_level("nr", 101, 0, 100).is_err());
+        assert!(validate_capture_level("norm", 1, 1, 100).is_ok());
+        assert!(validate_capture_level("norm", 0, 1, 100).is_err());
+    }
+
+    #[test]
+    fn capture_status_serializes_camel_case() {
+        let status = CaptureStatus {
+            device: Some("Microphone (Razer)".into()),
+            voice_gate: Some(false),
+            voice_gate_db: Some(-60.0),
+            eq_gains: Some(vec![0.0; 10]),
+            ..CaptureStatus::default()
+        };
+        let value = serde_json::to_value(status).unwrap();
+        assert_eq!(value["voiceGate"], false);
+        assert_eq!(value["voiceGateDb"], -60.0);
+        assert_eq!(value["eqGains"].as_array().unwrap().len(), 10);
     }
 }

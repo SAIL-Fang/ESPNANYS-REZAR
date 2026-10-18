@@ -97,6 +97,7 @@ dependencies = [
  "sail_app",
  "sail_core",
  "sail_hid",
+ "serde_json",
 ]
 
 [[package]]
@@ -115,6 +116,7 @@ dependencies = [
 name = "sail_thx_bridge"
 version = "0.1.0"
 dependencies = [
+ "serde",
  "serde_json",
 ]
 

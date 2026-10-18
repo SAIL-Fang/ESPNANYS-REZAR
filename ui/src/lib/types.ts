@@ -39,6 +39,24 @@ export type DeviceSnapshot = {
   issues: string[];
 };
 
+export type CaptureSnapshot = {
+  device: string | null;
+  voiceGate: boolean | null;
+  voiceGateDb: number | null;
+  noiseReduction: boolean | null;
+  noiseReductionLevel: number | null;
+  normalization: boolean | null;
+  normalizationLevel: number | null;
+  vocalClarity: boolean | null;
+  vocalClarityLevel: number | null;
+  volume: number | null;
+  sidetone: boolean | null;
+  sidetoneLevel: number | null;
+  preview: boolean | null;
+  eqEnabled: boolean | null;
+  eqGains: number[] | null;
+};
+
 export type ThxSnapshot = {
   installed: boolean;
   enabled: boolean | null;
@@ -48,6 +66,7 @@ export type ThxSnapshot = {
   dll: string | null;
   dllVersion: string | null;
   abi: string | null;
+  capture: CaptureSnapshot | null;
   error: string | null;
 };
 
