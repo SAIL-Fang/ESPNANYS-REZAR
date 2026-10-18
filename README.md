@@ -414,6 +414,7 @@ razer-blackshark-v2-hyperspeed/
 ├─ docs/protocol.md           # 64 字节 HID 协议细节
 ├─ docs/thx.md                # 内置 THX 的安装、注册表、API
 ├─ docs/audio-features.md     # EQ/声音标准化/麦克风增强的完整映射
+├─ docs/device-identification.md # Razer VID/PID、产品类型与驱动边界
 ├─ docs/architecture.md       # Synapse 原架构 + 推荐的低占用架构
 ├─ docs/frontend.md           # 前端选型、页面结构、开源仓库方案
 ├─ docs/design-spec.md        # 按“定方向→定基调→评审”出的完整设计文档
