@@ -23,6 +23,7 @@
 
   let battery = $derived(known(device.status?.battery, 0));
   let batteryOn = $derived(Math.max(0, Math.min(5, Math.round(battery / 20))));
+  let audioOk = $derived(device.status?.audioOutput?.isHeadset !== false);
   let wiredNotReady = $derived(
     device.status?.link === "wired" &&
       (device.status.battery.state !== "known" || device.status.charging.state !== "known")
@@ -60,8 +61,8 @@
     <strong class="mono">{fieldText(device.status?.battery, "%")}</strong>
   </div>
   <div class="status-item">
-    <span class="dot" class:on={device.thx?.installed} class:warn={!device.thx?.installed}></span>
-    <strong>{device.thx?.installed ? "THX 就绪" : "THX 未连接"}</strong>
+    <span class="dot" class:on={device.thx?.installed && audioOk} class:warn={!audioOk}></span>
+    <strong>{device.thx?.installed ? (audioOk ? "THX 就绪" : "THX 暂停") : "THX 未连接"}</strong>
   </div>
   <div class="spacer"></div>
   <button class="btn" onclick={() => device.refresh()} disabled={device.loading}>

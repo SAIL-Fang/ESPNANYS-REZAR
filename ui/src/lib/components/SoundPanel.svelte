@@ -10,17 +10,26 @@
   import { frequencies } from "$lib/presets";
   import EqEditor from "$lib/components/EqEditor.svelte";
   import NormalizationPanel from "$lib/components/NormalizationPanel.svelte";
+  import SpatialModeToggle from "$lib/components/SpatialModeToggle.svelte";
 
-  let eqPreset = $state<string | null>(null);
-  let gains = $state<number[] | null>(null);
+  const DEFAULT_GAINS = [1, -5, -3, 0, 1, 1, 1, 1, 1, -3];
+
+  let eqPreset = $state("custom");
+  let gains = $state<number[]>([...DEFAULT_GAINS]);
   let level = $state(10);
   let normalizationOn = $state(false);
   let synced = $state(false);
 
-  let available = $derived(!!device.thx?.installed);
+  let available = $derived(
+    !!device.thx?.installed && device.status?.audioOutput?.isHeadset !== false
+  );
+  let thxInstalled = $derived(!!device.thx?.installed);
   let spatial = $derived(device.thx?.spatialEnabled ?? null);
   let spatialBusy = $derived(device.busy || !available || spatial === null);
   let battery = $derived(known(device.status?.battery, 0));
+  let outputLabel = $derived(
+    available ? `THX ${device.thx?.level ?? "—"}` : thxInstalled ? "输出不是耳机" : "THX 未安装"
+  );
 
   $effect(() => {
     if (!synced && device.thx) {
@@ -41,17 +50,10 @@
     gains = [...preset.gains];
   }
 
-  function startFlat() {
-    eqPreset = "custom";
-    gains = Array.from({ length: 10 }, () => 0);
-  }
-
   function updateGain(index: number, value: number) {
     if (!Number.isFinite(value)) return;
     eqPreset = "custom";
-    gains = (gains ?? Array.from({ length: 10 }, () => 0)).map((gain, slot) =>
-      slot === index ? value : gain
-    );
+    gains = gains.map((gain, slot) => (slot === index ? value : gain));
   }
 
   function resetGains() {
@@ -60,7 +62,7 @@
   }
 
   async function applyGains() {
-    if (gains) await device.setEqGains(gains);
+    await device.setEqGains(gains);
   }
 
   async function saveNormalization() {
@@ -84,7 +86,7 @@
     <p>拖动曲线上的圆点调整，或直接输入数值。当前频段会同步显示。</p>
   </div>
   <span class="badge" class:ok={available} class:warn={!available}>
-    {available ? `THX ${device.thx?.level ?? "—"}` : "THX 未安装"}
+    {outputLabel}
   </span>
 </div>
 
@@ -94,22 +96,11 @@
     <h2 id="output-title">立体声 / THX 空间音效</h2>
     <p>空间音效由 THX APO 处理，和声音标准化相互独立。</p>
   </div>
-  <div class="preset-seg output-seg" role="group" aria-label="输出模式">
-    <button
-      type="button"
-      class:on={spatial === false}
-      disabled={spatialBusy}
-      aria-pressed={spatial === false}
-      onclick={() => chooseSpatial(false)}
-    >立体声</button>
-    <button
-      type="button"
-      class:on={spatial === true}
-      disabled={spatialBusy}
-      aria-pressed={spatial === true}
-      onclick={() => chooseSpatial(true)}
-    >THX 空间音效</button>
-  </div>
+      <SpatialModeToggle
+        value={spatial ?? false}
+        disabled={spatialBusy}
+        onchange={chooseSpatial}
+      />
 </section>
 
 <section class="panel eq-panel" aria-labelledby="eq-title">
@@ -132,7 +123,7 @@
     </div>
   </div>
 
-  {#if gains !== null && gains.length === 10}
+  {#if gains.length === 10}
     <EqEditor
       {gains}
       {frequencies}
@@ -141,12 +132,9 @@
       onapply={applyGains}
       onreset={resetGains}
     />
+    <p class="eq-default-note">默认起点：{DEFAULT_GAINS.join(", ")} dB；不会自动写入，点「写入耳机」才会覆盖。</p>
   {:else}
-    <div class="eq-unknown">
-      <strong>当前均衡器曲线未知</strong>
-      <p>耳机没有返回当前 10 段增益。选择一个预设，或从平直曲线开始；这样不会在写入时覆盖未知的其余频段。</p>
-      <button class="btn" type="button" onclick={startFlat} disabled={device.busy}>从平直曲线开始</button>
-    </div>
+    <p class="muted">均衡器需要 10 段数据。</p>
   {/if}
 
   <p class="inline-status">{device.notice}</p>

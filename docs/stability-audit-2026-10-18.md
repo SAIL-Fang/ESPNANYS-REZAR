@@ -22,7 +22,7 @@ No hardware soak was performed. Hardware-marked tests remain `#[ignore]`.
 
 **EQ editor could overwrite an unknown curve.** The UI used `device.presets[0]` as if it were the headset's current 10-band state. There is no HID/THX getter for the current gains, so launching with a custom curve and writing one band would overwrite the other nine.
 
-Fix: the sound page now starts in an explicit **当前均衡器曲线未知** state. The user must either select a preset (which is written first and then loaded into the editor) or choose **从平直曲线开始**. No fake curve is written.
+Fix (updated per user request): the sound page now starts with an explicit **default starting curve** `[1, -5, -3, 0, 1, 1, 1, 1, 1, -3]` and a note that it is not read back from the headset. It is only written when the user presses 「写入耳机」; selecting a preset still writes that preset first and then loads its gains. The tradeoff is deliberate: convenient default, but applying it can overwrite an unknown custom curve.
 
 ### P1 — fixed
 
@@ -39,14 +39,19 @@ Fix: the sound page now starts in an explicit **当前均衡器曲线未知** st
 - **THX spatial mode was missing.** Added `GetRenderSpatialProcessing` / `SetRenderSpatialProcessing`, helper readback, `spatialEnabled` in the snapshot, and the stereo / THX SPATIAL AUDIO switch. Tested off → on against the installed DLL and through a CDP-driven UI click.
 - **UI poll and write state could race.** `refresh()` now has an epoch (stale responses are dropped), skips polling while a write is active, and uses `finally` for `loading`. `busy` is a reference count for overlapping writes, and Enter is gated on `busy`.
 - **Numeric EQ input needed a draft state.** The field now keeps a raw string while focused, ignores empty input, supports `-`/decimal intermediate states, commits on blur/Enter, and reverts on Escape.
+- **Default output was not checked.** `sail_app` now reads the Windows default output name through `cpal` and exposes `audioOutput`; the UI warns and disables THX controls when it is not a BlackShark, while HID controls remain usable. The demo is local and still playable.
+- **No tray resident mode.** Added a Tauri tray icon with Show / Quit; closing the window hides to the tray. Tray settings/autostart are still pending.
+- **THX helper could hang indefinitely.** `ProcessThxHost::run` now polls with an 8-second deadline and kills the child on timeout.
+- **THX container discovery could pick a different BlackShark.** It now ranks exact BlackShark V2 HyperSpeed/V2 HS names above generic BlackShark names, still preferring type 0.
+- **Installer only warned on `pnputil` failure.** Missing driver backup and any nonzero `pnputil` result now fail the install; `-SkipThx` remains the explicit opt-out.
 
 ### P1 — open
 
 - **Feature-report read has no timeout.** `cached_event()` → `get_feature_report()` is a blocking hidapi call. A wedged dongle can leave `snapshot()` and a `spawn_blocking` thread stuck; the 10-second poll can accumulate. Needs a bounded worker/read path or a total snapshot deadline.
-- **THX container discovery can select the wrong BlackShark** (`name.contains("BlackShark")`) and silently falls back to the hardcoded container. Should match exact PID/container ID and error instead of falling back.
+- **THX container discovery still falls back to the hardcoded container** if no name ranks. Ranking now prefers exact V2 HyperSpeed/V2 HS names, but a wrong generic BlackShark can still win when no exact name exists; exact PID/container matching remains the next step.
 - **Passive THX binding still calls `SetDefaultRenderDevice`.** Gating it made the DLL fail/crash during open in testing; the call is required before per-endpoint getters. This remains a documented side effect of status/space reads and needs a proper passive binding path.
 - **UI last-good state and optimistic writes.** Silent read failures now keep the previous status/THX, but there is still no separate `statusError`/`thxError`; normalization/sidetone still toggle optimistically without rollback, and the one-shot `synced` latch can retain a stale THX level.
-- **Installer uses elevated per-user paths and only warns on driver failures.** Over-the-shoulder UAC can put the helper in the admin profile; `pnputil` failures are not fatal; signatures are not checked.
+- **Installer uses elevated per-user paths and does not check signatures.** Over-the-shoulder UAC can put the helper in the admin profile; driver failures now abort, but package signatures are still not verified.
 - **CI is not in the repo.** GitHub CLI token lacks `workflow` scope; add the workflow after refreshing scopes.
 
 ### P2 — fixed or documented
@@ -57,7 +62,6 @@ Fix: the sound page now starts in an explicit **当前均衡器曲线未知** st
 - Fixed: `read_feature_report(0)` no longer panics.
 - Fixed: EQ write validation is `-12..=12` at the app boundary.
 - Open: global event cache is not keyed by PID and never expires.
-- Open: THX helper `.output()` has no timeout.
 - Open: THX helper status overwrites `installed=true` even when per-field calls fail.
 - Open: container discovery/JSON parser is hand-rolled and accepts only exact `"id":"` formatting.
 - Open: package script does not clear stale `payload/` and omits update scripts; installer rollback dirs accumulate.
@@ -65,7 +69,7 @@ Fix: the sound page now starts in an explicit **当前均衡器曲线未知** st
 ## Next three actions
 
 1. Add a `snapshot_with(&mut impl Transport, ...)` seam and tests for timeout, empty data, status 5, and event-cache fallback.
-2. Bound the feature-report read (or skip it after a total snapshot deadline), tighten THX container matching, and add a THX helper timeout/kill path.
-3. Separate last-good status/THX errors, add rollback for optimistic normalization/sidetone writes, add a component test around EQ unknown → preset → apply, and restore CI.
+2. Bound the wired feature-report read (wireless already skips it) and replace container fallback with an explicit error when no exact headset is found.
+3. Separate last-good status/THX errors, add rollback for optimistic normalization/sidetone writes, add a component test around the default EQ/preset/apply path, and restore CI.
 
 > This audit proves the checks above pass and documents known failure modes. It does not prove the absence of bugs, especially on hardware, across driver versions, or under Windows power/sleep transitions.

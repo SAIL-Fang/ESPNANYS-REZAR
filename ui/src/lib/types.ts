@@ -23,6 +23,11 @@ export type DeviceSnapshot = {
   dongleLed: Field<number>;
   speakerPresetEq: Field<number>;
   edition: Field<number>;
+  audioOutput: {
+    name: string | null;
+    isHeadset: boolean;
+    error: string | null;
+  };
   issues: string[];
 };
 

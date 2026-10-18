@@ -9,6 +9,8 @@
 //! optional THX helper. `sail_core` stays protocol-only and `sail_hid` stays a
 //! transport adapter; the CLI and Tauri are both thin callers here.
 
+#[cfg(windows)]
+use cpal::traits::{DeviceTrait, HostTrait};
 use sail_core::{
     parse_event, Command, Error as CoreError, Event, SailDevice, SpeakerEqPreset, Transport,
     FRAME_LEN,
@@ -16,10 +18,11 @@ use sail_core::{
 use sail_hid::{HidTransport, PID_WIRED, PID_WIRELESS};
 use serde::{Deserialize, Serialize};
 use std::fmt;
+use std::io::Read;
 use std::path::PathBuf;
-use std::process::Command as ProcessCommand;
+use std::process::{Command as ProcessCommand, Stdio};
 use std::sync::{Mutex, OnceLock};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 #[derive(Debug, Default, Clone, Copy)]
 struct EventState {
@@ -93,6 +96,49 @@ impl Link {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct AudioOutput {
+    pub name: Option<String>,
+    pub is_headset: bool,
+    pub error: Option<String>,
+}
+
+#[cfg(windows)]
+fn current_audio_output() -> AudioOutput {
+    match cpal::default_host().default_output_device() {
+        Some(device) => match device.name() {
+            Ok(name) => {
+                let lower = name.to_ascii_lowercase();
+                AudioOutput {
+                    is_headset: lower.contains("blackshark"),
+                    name: Some(name),
+                    error: None,
+                }
+            }
+            Err(error) => AudioOutput {
+                name: None,
+                is_headset: false,
+                error: Some(format!("cannot read default output name: {error}")),
+            },
+        },
+        None => AudioOutput {
+            name: None,
+            is_headset: false,
+            error: Some("no default output device".into()),
+        },
+    }
+}
+
+#[cfg(not(windows))]
+fn current_audio_output() -> AudioOutput {
+    AudioOutput {
+        name: None,
+        is_headset: true,
+        error: Some("audio output check is Windows-only".into()),
+    }
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct DeviceSnapshot {
     pub connected: bool,
     pub link: Link,
@@ -104,6 +150,7 @@ pub struct DeviceSnapshot {
     pub dongle_led: Field<u8>,
     pub speaker_preset_eq: Field<u8>,
     pub edition: Field<u8>,
+    pub audio_output: AudioOutput,
     pub issues: Vec<String>,
 }
 
@@ -120,6 +167,7 @@ impl DeviceSnapshot {
             dongle_led: Field::Error(reason.clone()),
             speaker_preset_eq: Field::Error(reason.clone()),
             edition: Field::Error(reason.clone()),
+            audio_output: current_audio_output(),
             issues: vec![reason],
         }
     }
@@ -244,19 +292,50 @@ impl ProcessThxHost {
     }
 
     fn run(&self, args: &[&str]) -> Result<String, String> {
+        const TIMEOUT: Duration = Duration::from_secs(8);
         let helper = self
             .helper
             .as_ref()
             .ok_or_else(|| "THX helper not found; run scripts\\build.cmd -Stage".to_string())?;
-        let output = command_for(helper)
+        let mut child = command_for(helper)
             .args(args)
-            .output()
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
             .map_err(|error| format!("run {}: {error}", helper.display()))?;
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(format!("THX helper failed: {}", stderr.trim()));
+        let deadline = Instant::now() + TIMEOUT;
+        loop {
+            match child.try_wait() {
+                Ok(Some(status)) => {
+                    let mut stdout = String::new();
+                    let mut stderr = String::new();
+                    if let Some(mut pipe) = child.stdout.take() {
+                        pipe.read_to_string(&mut stdout)
+                            .map_err(|error| format!("read THX stdout: {error}"))?;
+                    }
+                    if let Some(mut pipe) = child.stderr.take() {
+                        pipe.read_to_string(&mut stderr)
+                            .map_err(|error| format!("read THX stderr: {error}"))?;
+                    }
+                    if !status.success() {
+                        return Err(format!("THX helper failed: {}", stderr.trim()));
+                    }
+                    return Ok(stdout);
+                }
+                Ok(None) if Instant::now() >= deadline => {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    return Err(format!("THX helper timed out after {}s", TIMEOUT.as_secs()));
+                }
+                Ok(None) => std::thread::sleep(Duration::from_millis(25)),
+                Err(error) => {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    return Err(format!("wait THX helper: {error}"));
+                }
+            }
         }
-        Ok(String::from_utf8_lossy(&output.stdout).into_owned())
     }
 }
 
@@ -350,8 +429,13 @@ impl SailApp {
         };
         // The wired headset answers normal commands with silence, but caches
         // the last asynchronous event in feature report 2. Read it before any
-        // command can overwrite that cache.
-        let cached_event = cached_event(&transport);
+        // command can overwrite that cache. Wireless uses the active GET path;
+        // skipping the feature read there also avoids its unbounded hidapi call.
+        let cached_event = if link == Link::Wired {
+            cached_event(&transport)
+        } else {
+            None
+        };
         let mut device = SailDevice::new(transport).with_timeout(Duration::from_millis(500));
         if link == Link::Wired {
             device = device.with_get_flags(0x00);
@@ -393,6 +477,7 @@ impl SailApp {
             dongle_led,
             speaker_preset_eq,
             edition,
+            audio_output: current_audio_output(),
             issues,
         }
     }

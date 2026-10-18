@@ -82,6 +82,16 @@
     <StatusStrip label={sectionLabel} />
 
     <div class="page-content">
+      {#if device.status?.audioOutput && device.status.audioOutput.isHeadset === false}
+        <div class="route-warning">
+          <strong>默认输出不是 Razer 耳机</strong>
+          <span>
+            当前：{device.status.audioOutput.name ?? "未知设备"}。
+            请先在 Windows 声音设置里把 BlackShark 设为默认输出；THX 功能暂不可用，HID 设置仍可用。
+          </span>
+        </div>
+      {/if}
+
       {#if device.error}
         <div class="inline-status error">{device.error}</div>
       {/if}

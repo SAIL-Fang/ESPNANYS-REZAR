@@ -5,8 +5,9 @@
   SPDX-License-Identifier: MIT
 -->
 <script lang="ts">
-  import { onDestroy } from "svelte";
+  import { onDestroy, onMount } from "svelte";
   import { device } from "$lib/device.svelte";
+  import SpatialModeToggle from "$lib/components/SpatialModeToggle.svelte";
 
   let stageEl: HTMLDivElement;
   let audio: AudioContext | null = null;
@@ -26,6 +27,8 @@
   let startPending = false;
   let demoSpatial = $state(false);
   let initialized = false;
+  let outputs = $state<MediaDeviceInfo[]>([]);
+  let sinkId = $state("default");
 
   let available = $derived(!!device.thx?.installed);
   let timeText = $derived(formatTime(elapsed % 30));
@@ -135,6 +138,13 @@
     try {
       const context = ensureAudio();
       await context.resume();
+      try {
+        await refreshOutputs();
+        await applySink(sinkId);
+      } catch {
+        // Device selection is best-effort; keep the system default audible.
+        sinkId = "default";
+      }
       if (!source) {
         const next = context.createBufferSource();
         next.buffer = makePingBuffer(context);
@@ -173,6 +183,45 @@
     else void play();
   }
 
+  async function applySink(id: string) {
+    if (!audio) {
+      sinkId = id;
+      return;
+    }
+    const sinkable = audio as AudioContext & {
+      setSinkId?: (value: string) => Promise<void>;
+    };
+    if (!sinkable.setSinkId) {
+      if (id !== "default") throw new Error("当前 WebView 不支持选择输出设备");
+      return;
+    }
+    await sinkable.setSinkId(id);
+    sinkId = id;
+  }
+
+  async function refreshOutputs() {
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      outputs = devices.filter((device) => device.kind === "audiooutput");
+      // Best-effort: if the browser exposes labels, prefer the headset output.
+      if (sinkId === "default") {
+        const match = outputs.find((device) => /blackshark|razer/i.test(device.label));
+        if (match) sinkId = match.deviceId;
+      }
+    } catch {
+      outputs = [];
+    }
+  }
+
+  async function chooseOutput(id: string) {
+    try {
+      await applySink(id);
+      if (playing) await audio?.resume();
+    } catch (error) {
+      audioError = error instanceof Error ? error.message : String(error);
+    }
+  }
+
   function toggleSpatial(enabled: boolean) {
     // Audition-only switch: it must work without THX installed and must not
     // mutate the system output mode. The real switch lives on the Sound page.
@@ -204,6 +253,14 @@
     if (playing) void play();
   }
 
+  function onVisibilityChange() {
+    if (document.hidden && playing) void pause();
+  }
+
+  onMount(() => {
+    document.addEventListener("visibilitychange", onVisibilityChange);
+  });
+
   $effect(() => {
     // Seed the audition mode from the system once, then keep the demo local.
     if (!initialized && device.thx) {
@@ -222,6 +279,7 @@
 
   onDestroy(() => {
     cancelAnimationFrame(raf);
+    document.removeEventListener("visibilitychange", onVisibilityChange);
     if (source) {
       try {
         source.stop();
@@ -250,21 +308,28 @@
       <h2 id="demo-mode-title">立体声 / 空间音效试听</h2>
       <p>仅改变演示试听；系统输出模式仍在「声音」页切换。</p>
     </div>
-    <div class="preset-seg demo-seg" role="group" aria-label="演示试听模式">
-      <button
-        type="button"
-        class:on={!demoSpatial}
-        aria-pressed={!demoSpatial}
-        onclick={() => toggleSpatial(false)}
-      >立体声</button>
-      <button
-        type="button"
-        class:on={demoSpatial}
-        aria-pressed={demoSpatial}
-        onclick={() => toggleSpatial(true)}
-      >空间音效</button>
-    </div>
+    <SpatialModeToggle
+      value={demoSpatial}
+      label="演示试听模式"
+      spatialLabel="空间音效"
+      onchange={toggleSpatial}
+    />
   </section>
+
+  <div class="demo-output-row">
+    <label for="demo-output">演示输出设备</label>
+    <select
+      id="demo-output"
+      value={sinkId}
+      onchange={(event) => chooseOutput(event.currentTarget.value)}
+    >
+      <option value="default">系统默认</option>
+      {#each outputs as output, index}
+        <option value={output.deviceId}>{output.label || `输出设备 ${index + 1}`}</option>
+      {/each}
+    </select>
+    <span>可手动指向 Razer 耳机；浏览器未暴露名称时只显示编号。</span>
+  </div>
 
   <div class="demo-stage" class:playing bind:this={stageEl}>
     <div class="demo-stage-top">

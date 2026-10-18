@@ -23,6 +23,10 @@ export class DeviceStore {
     return this.thx?.error ?? "";
   }
 
+  private settle(epoch: number, apply: () => void) {
+    if (epoch === this.refreshEpoch) apply();
+  }
+
   async refresh(silent = false) {
     // A write owns the device; do not overlap it with a 10-second poll.
     if (this.busy) return;
@@ -35,32 +39,38 @@ export class DeviceStore {
     try {
       try {
         const status = await api.getStatus();
-        if (epoch === this.refreshEpoch) this.status = status;
+        this.settle(epoch, () => (this.status = status));
       } catch (error) {
-        if (epoch === this.refreshEpoch && !silent) {
-          this.status = null;
-          this.error = `无法读取耳机：${errorText(error)}`;
-        }
+        this.settle(epoch, () => {
+          if (!silent) {
+            this.status = null;
+            this.error = `无法读取耳机：${errorText(error)}`;
+          }
+        });
       }
       try {
         const thx = await api.getThxStatus();
-        if (epoch === this.refreshEpoch) this.thx = thx;
+        this.settle(epoch, () => (this.thx = thx));
       } catch (error) {
-        if (epoch === this.refreshEpoch && !silent) {
-          this.thx = null;
-          this.error = this.error || `无法读取 THX：${errorText(error)}`;
-        }
+        this.settle(epoch, () => {
+          if (!silent) {
+            this.thx = null;
+            this.error = this.error || `无法读取 THX：${errorText(error)}`;
+          }
+        });
       }
       try {
         const presets = await api.getEqPresets();
-        if (epoch === this.refreshEpoch) this.presets = presets;
+        this.settle(epoch, () => (this.presets = presets));
       } catch (error) {
-        if (epoch === this.refreshEpoch && !silent) {
-          this.error = this.error || `无法读取均衡器预设：${errorText(error)}`;
-        }
+        this.settle(epoch, () => {
+          if (!silent) {
+            this.error = this.error || `无法读取均衡器预设：${errorText(error)}`;
+          }
+        });
       }
     } finally {
-      if (epoch === this.refreshEpoch) this.loading = false;
+      this.settle(epoch, () => (this.loading = false));
     }
   }
 
@@ -121,12 +131,12 @@ export class DeviceStore {
     const epoch = ++this.refreshEpoch;
     try {
       const thx = await api.getThxStatus();
-      if (epoch === this.refreshEpoch) this.thx = thx;
+      this.settle(epoch, () => (this.thx = thx));
     } catch (error) {
-      if (epoch === this.refreshEpoch) {
+      this.settle(epoch, () => {
         this.thx = null;
         this.error = `无法读取 THX：${errorText(error)}`;
-      }
+      });
     }
   }
 

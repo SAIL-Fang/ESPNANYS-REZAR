@@ -151,13 +151,17 @@ if (-not $NoShortcut) {
 if (-not $SkipThx) {
     Say "Restore THX driver packages"
     $infs = Get-ChildItem (Join-Path $Backup "driver-store") -Recurse -Filter "*.inf" -ErrorAction SilentlyContinue
-    if (-not $infs) { Warn "No .inf files in backup driver-store; skipping driver restore." }
+    if (-not $infs) { Fail "No .inf files in backup driver-store; cannot restore THX drivers. Use -SkipThx to install only the app." }
+    $failedDrivers = @()
     foreach ($inf in $infs) {
         Write-Host "  pnputil /add-driver $($inf.FullName) /install"
         & pnputil.exe /add-driver $inf.FullName /install | Out-Host
         if ($LASTEXITCODE -ne 0) {
-            Warn "pnputil returned $LASTEXITCODE for $($inf.Name); continuing (may already be installed)."
+            $failedDrivers += "$($inf.Name) (exit $LASTEXITCODE)"
         }
+    }
+    if ($failedDrivers.Count -gt 0) {
+        Fail "THX driver restore failed: $($failedDrivers -join '; ')"
     }
 
     Say "Restore VSSrv service"

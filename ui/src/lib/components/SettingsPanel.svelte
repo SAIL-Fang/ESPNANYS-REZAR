@@ -20,6 +20,8 @@
   <dl class="kv">
     <dt>状态</dt><dd>{device.thx?.installed ? "已连接" : "未连接"}</dd>
     <dt>端点</dt><dd>{device.thx?.endpoint ?? "—"}</dd>
+    <dt>默认输出</dt><dd>{device.status?.audioOutput?.name ?? "—"}</dd>
+    <dt>输出检查</dt><dd>{device.status?.audioOutput?.isHeadset ? "Razer 耳机" : "不是 Razer 耳机"}</dd>
     <dt>标准化</dt><dd>{device.thx?.enabled ? "开" : "关"} · {device.thx?.level ?? "—"}</dd>
     <dt>DLL</dt><dd>{device.thx?.dll ?? "—"}</dd>
     <dt>DLL 版本</dt><dd>{device.thx?.dllVersion ?? "—"}</dd>
@@ -27,7 +29,7 @@
   </dl>
   <div class="row">
     <span class="inline-status">{device.verifyOutput || device.thxError}</span>
-    <button class="btn primary" onclick={() => device.verifyThx()} disabled={device.busy}>验证 1–100</button>
+    <button class="btn primary" onclick={() => device.verifyThx()} disabled={device.busy || device.status?.audioOutput?.isHeadset === false}>验证 1–100</button>
   </div>
 </section>
 
@@ -37,6 +39,7 @@
     <dt>项目</dt><dd>ESPNANYS-REZAR</dd>
     <dt>作者</dt><dd>SAIL</dd>
     <dt>许可证</dt><dd>MIT</dd>
+    <dt>关闭窗口</dt><dd>驻留托盘</dd>
   </dl>
   <p class="muted">
     ESPNANYS-REZAR 是独立的非官方控制台。HID 协议由本项目实现；声音处理复用用户已安装的 THX APO。

@@ -131,19 +131,28 @@ fn discover_container(module: *mut c_void) -> Option<String> {
         let json = CStr::from_ptr(ptr).to_string_lossy();
         let value: serde_json::Value = serde_json::from_str(&json).ok()?;
         let devices = value.get("devices")?.as_array()?;
-        let is_headset = |device: &&serde_json::Value| {
-            device
-                .get("name")
-                .and_then(|name| name.as_str())
-                .map(|name| name.contains("BlackShark"))
-                .unwrap_or(false)
+        let score = |device: &&serde_json::Value| -> i32 {
+            let Some(name) = device.get("name").and_then(|name| name.as_str()) else {
+                return 0;
+            };
+            let name = name.to_ascii_lowercase();
+            if name.contains("blackshark v2 hyperspeed") || name.contains("blackshark v2 hs") {
+                3
+            } else if name.contains("blackshark") {
+                1
+            } else {
+                0
+            }
         };
         devices
             .iter()
-            .find(|device| {
-                is_headset(device) && device.get("type").and_then(|kind| kind.as_u64()) == Some(0)
+            .filter(|device| score(device) > 0)
+            .max_by_key(|device| {
+                (
+                    score(device),
+                    device.get("type").and_then(|kind| kind.as_u64()) == Some(0),
+                )
             })
-            .or_else(|| devices.iter().find(is_headset))
             .and_then(|device| device.get("deviceContainerId"))
             .and_then(|id| id.as_str())
             .map(ToOwned::to_owned)

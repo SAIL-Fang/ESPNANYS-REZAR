@@ -50,7 +50,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             Some(path) => ThxBridge::with_dll(path)?,
             None => ThxBridge::open()?,
         };
-        verify(&bridge, observed.enabled, observed.level)?;
+        verify(&bridge, &observed)?;
         return Ok(());
     }
     let bridge = match (dll, passive) {
@@ -140,12 +140,8 @@ fn print_json(status: &ThxStatus) -> Result<(), Box<dyn std::error::Error>> {
 /// present before. The probe differs from the current level because THX
 /// reports failure when asked to apply the value it already holds, and the
 /// restore always runs, including after a failed probe.
-fn verify(
-    bridge: &ThxBridge,
-    before_enabled: Option<bool>,
-    before_level: Option<i32>,
-) -> Result<(), ThxError> {
-    let before = match before_level {
+fn verify(bridge: &ThxBridge, observed: &ThxStatus) -> Result<(), ThxError> {
+    let before = match observed.level {
         Some(level) if (1..=100).contains(&level) => level,
         _ => {
             return Err(ThxError::Status(
@@ -153,6 +149,7 @@ fn verify(
             ))
         }
     };
+    let before_enabled = observed.enabled;
     println!("before: {before} (enabled: {before_enabled:?})");
 
     let probe = if before == 1 { 2 } else { 1 };

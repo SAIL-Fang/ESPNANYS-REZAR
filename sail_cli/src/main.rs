@@ -228,6 +228,15 @@ fn print_snapshot(snapshot: &DeviceSnapshot) {
     println!("dongle-led: {}", field_display(&snapshot.dongle_led));
     println!("speaker-eq: {}", field_display(&snapshot.speaker_preset_eq));
     println!("edition: {}", field_display(&snapshot.edition));
+    println!(
+        "audio-output: {} ({})",
+        snapshot.audio_output.name.as_deref().unwrap_or("unknown"),
+        if snapshot.audio_output.is_headset {
+            "headset"
+        } else {
+            "not headset"
+        }
+    );
     if !snapshot.issues.is_empty() {
         println!("issues: {}", snapshot.issues.join("; "));
     }
