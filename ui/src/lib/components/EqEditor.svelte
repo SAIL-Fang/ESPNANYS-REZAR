@@ -45,12 +45,37 @@
 
   function startDrag(event: PointerEvent, index: number) {
     event.preventDefault();
+    event.stopPropagation();
     active = index;
     dragIndex = index;
     const dot = event.currentTarget as HTMLButtonElement;
     dot.focus();
     dot.setPointerCapture(event.pointerId);
     oninput(index, gainAt(event.clientY));
+  }
+
+  function startGraphDrag(event: PointerEvent) {
+    if ((event.target as HTMLElement).closest(".eq-dot")) return;
+    const rect = graphEl.getBoundingClientRect();
+    const ratioX = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
+    const index = Math.round(ratioX * (gains.length - 1));
+    active = index;
+    dragIndex = index;
+    graphEl.setPointerCapture(event.pointerId);
+    oninput(index, gainAt(event.clientY));
+  }
+
+  function moveGraphDrag(event: PointerEvent) {
+    if (dragIndex === null) return;
+    oninput(dragIndex, gainAt(event.clientY));
+  }
+
+  function endGraphDrag(event: PointerEvent) {
+    if (dragIndex === null) return;
+    dragIndex = null;
+    if (graphEl.hasPointerCapture(event.pointerId)) {
+      graphEl.releasePointerCapture(event.pointerId);
+    }
   }
 
   function moveDrag(event: PointerEvent, index: number) {
@@ -83,7 +108,16 @@
   }
 </script>
 
-<div class="eq-graph" aria-label="均衡器曲线" bind:this={graphEl}>
+<div
+  class="eq-graph"
+  role="group"
+  aria-label="均衡器曲线"
+  bind:this={graphEl}
+  onpointerdown={startGraphDrag}
+  onpointermove={moveGraphDrag}
+  onpointerup={endGraphDrag}
+  onpointercancel={endGraphDrag}
+>
   <span class="eq-unit">−12 dB / +12 dB</span>
   <span class="eq-axis" style="top:8%">+12</span>
   <span class="eq-axis" style="top:29%">+6</span>
@@ -164,7 +198,7 @@
 
 <div class="eq-actions">
   <div class="eq-hint">
-    拖动曲线上的圆点调整 <span>·</span> 也可直接输入 dB <span>·</span> 输入后按 <kbd>Enter</kbd> 写入 <span>·</span> 范围 −12 到 +12 dB
+    拖动曲线或圆点调整 <span>·</span> 也可直接输入 dB <span>·</span> 输入后按 <kbd>Enter</kbd> 写入 <span>·</span> 范围 −12 到 +12 dB
   </div>
   <div class="actions">
     <button class="btn" type="button" onclick={onreset} disabled={busy}>恢复平直</button>

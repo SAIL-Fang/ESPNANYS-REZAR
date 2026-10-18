@@ -265,6 +265,8 @@ h3 { margin: 0; font-size: 14px; font-weight: 650; letter-spacing: -0.01em; }
   height: clamp(220px, 38vh, 320px);
   margin: 14px 2px 0 30px;
   border-bottom: 1px solid var(--sail-line);
+  cursor: crosshair;
+  touch-action: none;
 }
 .eq-graph svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
 .eq-dots { position: absolute; inset: 0; z-index: 2; pointer-events: none; }
