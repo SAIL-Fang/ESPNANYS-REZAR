@@ -11,11 +11,14 @@
   import EqEditor from "$lib/components/EqEditor.svelte";
   import NormalizationPanel from "$lib/components/NormalizationPanel.svelte";
   import SpatialModeToggle from "$lib/components/SpatialModeToggle.svelte";
+  import { onDestroy } from "svelte";
 
   const DEFAULT_GAINS = [1, -5, -3, 0, 1, 1, 1, 1, 1, -3];
 
   let eqPreset = $state("custom");
   let gains = $state<number[]>([...DEFAULT_GAINS]);
+  let saveTimer: ReturnType<typeof setTimeout> | null = null;
+  let savingEq = $state(false);
   let level = $state(10);
   let normalizationOn = $state(false);
   let synced = $state(false);
@@ -39,31 +42,65 @@
     }
   });
 
+  function cancelAutoSave() {
+    if (saveTimer) {
+      clearTimeout(saveTimer);
+      saveTimer = null;
+    }
+  }
+
+  function scheduleGainSave(next: number[]) {
+    cancelAutoSave();
+    saveTimer = setTimeout(() => {
+      saveTimer = null;
+      void persistGains(next);
+    }, 350);
+  }
+
+  async function persistGains(next: number[]) {
+    savingEq = true;
+    await device.setEqGains([...next]);
+    savingEq = false;
+  }
+
   async function selectPreset(id: string) {
     const preset = device.presets.find((item) => item.id === id);
     if (!preset) return;
+    // A pending drag must not overwrite the preset after it is applied.
+    cancelAutoSave();
     // Do not show a curve until the device accepted the preset. Otherwise a
     // failed write would leave a convincing but false UI state.
     const ok = await device.setEqPreset(id, preset.label);
     if (!ok) return;
     eqPreset = id;
     gains = [...preset.gains];
+    // Write the full 10-band curve as well as the preset index, so the
+    // hardware actually matches the curve shown in the editor.
+    await device.setEqGains([...preset.gains]);
   }
 
   function updateGain(index: number, value: number) {
     if (!Number.isFinite(value)) return;
     eqPreset = "custom";
-    gains = gains.map((gain, slot) => (slot === index ? value : gain));
+    const next = gains.map((gain, slot) => (slot === index ? value : gain));
+    gains = next;
+    scheduleGainSave(next);
   }
 
   function resetGains() {
+    cancelAutoSave();
     eqPreset = "custom";
-    gains = Array.from({ length: 10 }, () => 0);
+    const next = [...DEFAULT_GAINS];
+    gains = next;
+    scheduleGainSave(next);
   }
 
-  async function applyGains() {
-    await device.setEqGains(gains);
-  }
+  onDestroy(() => {
+    if (saveTimer) {
+      cancelAutoSave();
+      void persistGains(gains);
+    }
+  });
 
   async function saveNormalization() {
     await device.saveNormalization(level);
@@ -127,17 +164,18 @@
     <EqEditor
       {gains}
       {frequencies}
-      busy={device.busy}
+      busy={device.busy || savingEq}
       oninput={updateGain}
-      onapply={applyGains}
       onreset={resetGains}
     />
-    <p class="eq-default-note">默认起点：{DEFAULT_GAINS.join(", ")} dB；不会自动写入，点「写入耳机」才会覆盖。</p>
+    <p class="eq-default-note">
+      拖动/输入会自动写入；「重置」回到默认曲线 {DEFAULT_GAINS.join(", ")} dB，也会立即写入。
+    </p>
   {:else}
     <p class="muted">均衡器需要 10 段数据。</p>
   {/if}
 
-  <p class="inline-status">{device.notice}</p>
+  <p class="inline-status">{savingEq ? "均衡器写入中…" : device.notice}</p>
 </section>
 
 <div class="bottom-grid">

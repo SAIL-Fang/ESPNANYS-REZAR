@@ -10,11 +10,10 @@
     frequencies: string[];
     busy: boolean;
     oninput: (index: number, value: number) => void;
-    onapply: () => void;
     onreset: () => void;
   }
 
-  let { gains, frequencies, busy, oninput, onapply, onreset }: Props = $props();
+  let { gains, frequencies, busy, oninput, onreset }: Props = $props();
 
   let active = $state(3);
   let graphEl: HTMLDivElement;
@@ -65,7 +64,6 @@
     if (event.key === "Enter") {
       event.preventDefault();
       commitDraft(index);
-      if (!busy) onapply();
     } else if (event.key === "Escape") {
       event.preventDefault();
       editing = null;
@@ -250,10 +248,9 @@
 
 <div class="eq-actions">
   <div class="eq-hint">
-    拖动曲线或圆点调整 <span>·</span> 也可直接输入 dB <span>·</span> 输入后按 <kbd>Enter</kbd> 写入 <span>·</span> 范围 −12 到 +12 dB
+    拖动曲线或圆点调整 <span>·</span> 也可直接输入 dB <span>·</span> 改动会自动写入 <span>·</span> 范围 −12 到 +12 dB
   </div>
   <div class="actions">
-    <button class="btn" type="button" onclick={onreset} disabled={busy}>恢复平直</button>
-    <button class="btn primary" type="button" onclick={onapply} disabled={busy}>写入耳机</button>
+    <button class="btn" type="button" onclick={onreset} disabled={busy}>重置</button>
   </div>
 </div>

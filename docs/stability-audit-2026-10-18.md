@@ -22,7 +22,7 @@ No hardware soak was performed. Hardware-marked tests remain `#[ignore]`.
 
 **EQ editor could overwrite an unknown curve.** The UI used `device.presets[0]` as if it were the headset's current 10-band state. There is no HID/THX getter for the current gains, so launching with a custom curve and writing one band would overwrite the other nine.
 
-Fix (updated per user request): the sound page now starts with an explicit **default starting curve** `[1, -5, -3, 0, 1, 1, 1, 1, 1, -3]` and a note that it is not read back from the headset. It is only written when the user presses 「写入耳机」; selecting a preset still writes that preset first and then loads its gains. The tradeoff is deliberate: convenient default, but applying it can overwrite an unknown custom curve.
+Fix (updated per user request): the sound page now starts with an explicit **default starting curve** `[1, -5, -3, 0, 1, 1, 1, 1, 1, -3]`. Curve edits and preset tabs write automatically (350 ms debounce for drags); the separate 「写入耳机」 button is gone. 「重置」 restores that same default curve and writes it immediately. The tradeoff is deliberate: convenient default, but applying it can overwrite an unknown custom curve.
 
 ### P1 — fixed
 

@@ -98,6 +98,7 @@ ESPNANYS-REZAR is an independent, open-source **Razer headset driver alternative
 - Default-output guard: warns and disables THX controls when Windows is not using the Razer headset; HID settings still work.
 - Tray resident by default; closing the window hides it, and the tray menu has Show / Quit.
 - A Tauri 2 + Svelte 5 desktop UI with a directly draggable EQ curve and per-band dB input.
+- EQ preset tabs write immediately; curve edits auto-save after a short debounce; Reset restores `[1, -5, -3, 0, 1, 1, 1, 1, 1, -3]` and writes it.
 - A reversible **disable Razer Synapse 4 / driver auto-updates** switch.
 - No Razer or THX binaries are bundled or redistributed.
 
@@ -149,7 +150,7 @@ Razer headset driver · Razer headset driver alternative · disable Razer Synaps
 | `sail_app` | ✅ | 应用编排、`Field` 部分成功快照、THX host 接缝；CLI/UI 共用 |
 | `sail_cli` | ✅ 实测 | `status` / `battery` / `sidetone` / `eq-preset` / `eq-gains` |
 | `sail_thx_bridge` | ✅ 实测 | 加载已安装 THX DLL；`verify`：写 1 → 回读 1 → 恢复 10 |
-| `sail_ui` | ✅ 首版 | Tauri 2 + Svelte 5；可直接拖曲线 / 输入 dB 的均衡器、声音标准化 1–100、立体声 / THX 空间音效切换、实时合成演示、默认输出检查、托盘常驻 |
+| `sail_ui` | ✅ 首版 | Tauri 2 + Svelte 5；可直接拖曲线 / 输入 dB 的均衡器（改动自动写入）、声音标准化 1–100、立体声 / THX 空间音效切换、实时合成演示、默认输出检查、托盘常驻 |
 | 麦克风 THX 参数 | ⏳ | 噪声门/降噪/标准化/亮丽人声/麦克风 EQ 下一阶段 |
 | 托盘设置 / 开机启动 | ⏳ | 托盘已可用；设置页常驻开关和开机启动下一阶段 |
 
