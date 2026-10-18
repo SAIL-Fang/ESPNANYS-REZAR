@@ -136,10 +136,10 @@ fn discover_container(module: *mut c_void) -> Option<String> {
                 return 0;
             };
             let name = name.to_ascii_lowercase();
+            // Only the exact HyperSpeed family is accepted. A generic
+            // "BlackShark" entry could be a different headset/container.
             if name.contains("blackshark v2 hyperspeed") || name.contains("blackshark v2 hs") {
                 3
-            } else if name.contains("blackshark") {
-                1
             } else {
                 0
             }
@@ -203,10 +203,15 @@ impl ThxBridge {
                 std::io::Error::last_os_error()
             )));
         }
-        let container_value = std::env::var("SAIL_THX_CONTAINER")
-            .ok()
-            .or_else(|| discover_container(module))
-            .unwrap_or_else(|| CONTAINER.to_string());
+        let container_value = match std::env::var("SAIL_THX_CONTAINER") {
+            Ok(value) => value,
+            Err(_) => discover_container(module).ok_or_else(|| {
+                ThxError::Status(
+                    "no exact BlackShark V2 HyperSpeed THX container; set SAIL_THX_CONTAINER to override"
+                        .into(),
+                )
+            })?,
+        };
         let container = CString::new(container_value)
             .map_err(|e| ThxError::Status(format!("invalid THX container: {e}")))?;
         let mut bridge = Self {

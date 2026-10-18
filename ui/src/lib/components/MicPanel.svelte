@@ -10,8 +10,9 @@
   let sidetone = $state(false);
 
   async function toggleSidetone() {
-    sidetone = !sidetone;
-    await device.setSidetone(sidetone);
+    const next = !sidetone;
+    const ok = await device.setSidetone(next);
+    if (ok) sidetone = next;
   }
 </script>
 

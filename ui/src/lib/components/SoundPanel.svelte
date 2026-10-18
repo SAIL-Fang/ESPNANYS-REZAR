@@ -7,13 +7,13 @@
 <script lang="ts">
   import { device } from "$lib/device.svelte";
   import { chargingText, fieldText, known } from "$lib/types";
-  import { frequencies } from "$lib/presets";
+  import { DEFAULT_EQ_GAINS, frequencies } from "$lib/presets";
   import EqEditor from "$lib/components/EqEditor.svelte";
   import NormalizationPanel from "$lib/components/NormalizationPanel.svelte";
   import SpatialModeToggle from "$lib/components/SpatialModeToggle.svelte";
   import { onDestroy } from "svelte";
 
-  const DEFAULT_GAINS = [1, -5, -3, 0, 1, 1, 1, 1, 1, -3];
+  const DEFAULT_GAINS = DEFAULT_EQ_GAINS;
 
   let eqPreset = $state("custom");
   let gains = $state<number[]>([...DEFAULT_GAINS]);
@@ -112,8 +112,9 @@
   }
 
   async function toggleNormalization() {
-    normalizationOn = !normalizationOn;
-    await device.setNormalizationEnabled(normalizationOn);
+    const next = !normalizationOn;
+    const ok = await device.setNormalizationEnabled(next);
+    if (ok) normalizationOn = next;
   }
 </script>
 

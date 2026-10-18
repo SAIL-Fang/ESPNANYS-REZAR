@@ -98,7 +98,7 @@ ESPNANYS-REZAR is an independent, open-source **Razer headset driver alternative
 - Default-output guard: warns and disables THX controls when Windows is not using the Razer headset; HID settings still work.
 - Tray resident by default; closing the window hides it, and the tray menu has Show / Quit.
 - A Tauri 2 + Svelte 5 desktop UI with a directly draggable EQ curve and per-band dB input.
-- EQ preset tabs write immediately; curve edits auto-save after a short debounce; Reset restores `[1, -5, -3, 0, 1, 1, 1, 1, 1, -3]` and writes it.
+- EQ preset tabs write immediately; curve edits auto-save after a short debounce; Reset restores `[1, -5, -3, 0, 1, 1, 1, 1, 1, -3]` and writes it. The default curve is also written once on startup and after a reconnect, because the headset can reset its EQ on reboot.
 - A reversible **disable Razer Synapse 4 / driver auto-updates** switch.
 - No Razer or THX binaries are bundled or redistributed.
 

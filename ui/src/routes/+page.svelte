@@ -93,8 +93,8 @@
         </div>
       {/if}
 
-      {#if device.error}
-        <div class="inline-status error">{device.error}</div>
+      {#if device.statusError || device.error}
+        <div class="inline-status error">{device.statusError || device.error}</div>
       {/if}
 
       {#if tab === "device"}

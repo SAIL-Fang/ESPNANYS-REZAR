@@ -22,7 +22,7 @@ No hardware soak was performed. Hardware-marked tests remain `#[ignore]`.
 
 **EQ editor could overwrite an unknown curve.** The UI used `device.presets[0]` as if it were the headset's current 10-band state. There is no HID/THX getter for the current gains, so launching with a custom curve and writing one band would overwrite the other nine.
 
-Fix (updated per user request): the sound page now starts with an explicit **default starting curve** `[1, -5, -3, 0, 1, 1, 1, 1, 1, -3]`. Curve edits and preset tabs write automatically (350 ms debounce for drags); the separate 「写入耳机」 button is gone. 「重置」 restores that same default curve and writes it immediately. The tradeoff is deliberate: convenient default, but applying it can overwrite an unknown custom curve.
+Fix (updated per user request): the sound page now starts with an explicit **default starting curve** `[1, -5, -3, 0, 1, 1, 1, 1, 1, -3]`, and writes it once on startup and after each reconnect (the headset can reset its EQ on reboot). Curve edits and preset tabs write automatically (350 ms debounce for drags); the separate 「写入耳机」 button is gone. 「重置」 restores that same default curve and writes it immediately. The tradeoff is deliberate: convenient default, but applying it can overwrite an unknown custom curve.
 
 ### P1 — fixed
 
@@ -42,15 +42,15 @@ Fix (updated per user request): the sound page now starts with an explicit **def
 - **Default output was not checked.** `sail_app` now enumerates Windows render endpoints through Core Audio and exposes `audioOutput`; a blocking modal offers a one-click `IPolicyConfig` default switch and an endpoint selector. It is user-mode COM, not a kernel driver. `sail_cli audio-default` exposes the same operation.
 - **No tray resident mode.** Added a Tauri tray icon with Show / Quit; closing the window hides to the tray. Tray settings/autostart are still pending.
 - **THX helper could hang indefinitely.** `ProcessThxHost::run` now polls with an 8-second deadline and kills the child on timeout.
-- **THX container discovery could pick a different BlackShark.** It now ranks exact BlackShark V2 HyperSpeed/V2 HS names above generic BlackShark names, still preferring type 0.
+- **THX container discovery could pick a different BlackShark.** It now accepts only exact BlackShark V2 HyperSpeed / V2 HS names, prefers type 0, and fails with an explicit error instead of falling back to the hardcoded container. `SAIL_THX_CONTAINER` remains the explicit override.
 - **Installer only warned on `pnputil` failure.** Missing driver backup and any nonzero `pnputil` result now fail the install; `-SkipThx` remains the explicit opt-out.
 
 ### P1 — open
 
 - **Feature-report read has no timeout.** `cached_event()` → `get_feature_report()` is a blocking hidapi call. A wedged dongle can leave `snapshot()` and a `spawn_blocking` thread stuck; the 10-second poll can accumulate. Needs a bounded worker/read path or a total snapshot deadline.
-- **THX container discovery still falls back to the hardcoded container** if no name ranks. Ranking now prefers exact V2 HyperSpeed/V2 HS names, but a wrong generic BlackShark can still win when no exact name exists; exact PID/container matching remains the next step.
+- **THX container name matching is still name-based** because the THX device JSON does not expose the HID PID. Exact V2 HyperSpeed/V2 HS names are required, and no fallback is used; a future DLL that reports a different name needs `SAIL_THX_CONTAINER`.
 - **Passive THX binding still calls `SetDefaultRenderDevice`.** Gating it made the DLL fail/crash during open in testing; the call is required before per-endpoint getters. This remains a documented side effect of status/space reads and needs a proper passive binding path.
-- **UI last-good state and optimistic writes.** Silent read failures now keep the previous status/THX, but there is still no separate `statusError`/`thxError`; normalization/sidetone still toggle optimistically without rollback, and the one-shot `synced` latch can retain a stale THX level.
+- **UI last-good state and optimistic writes.** Silent read failures now keep the previous status/THX, and `statusError` / `thxReadError` are separate from action errors. Sidetone and normalization only update their local switch after the write succeeds. The one-shot `synced` latch can still retain a stale THX level.
 - **Installer uses elevated per-user paths and does not check signatures.** Over-the-shoulder UAC can put the helper in the admin profile; driver failures now abort, but package signatures are still not verified.
 - **CI is not in the repo.** GitHub CLI token lacks `workflow` scope; add the workflow after refreshing scopes.
 
@@ -69,7 +69,7 @@ Fix (updated per user request): the sound page now starts with an explicit **def
 ## Next three actions
 
 1. Add a `snapshot_with(&mut impl Transport, ...)` seam and tests for timeout, empty data, status 5, and event-cache fallback.
-2. Bound the wired feature-report read (wireless already skips it) and replace container fallback with an explicit error when no exact headset is found.
-3. Separate last-good status/THX errors, add rollback for optimistic normalization/sidetone writes, add a component test around the default EQ/preset/apply path, and restore CI.
+2. Bound the wired feature-report read (wireless already skips it).
+3. Add a component test around startup default EQ/preset/apply and restore CI.
 
 > This audit proves the checks above pass and documents known failure modes. It does not prove the absence of bugs, especially on hardware, across driver versions, or under Windows power/sleep transitions.

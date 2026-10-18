@@ -5,6 +5,7 @@
  * SPDX-License-Identifier: MIT
  */
 import { api } from "./api";
+import { DEFAULT_EQ_GAINS } from "./presets";
 import type { DeviceSnapshot, EqPreset, ThxSnapshot } from "./types";
 
 export class DeviceStore {
@@ -14,13 +15,34 @@ export class DeviceStore {
   loading = $state(true);
   busy = $state(false);
   error = $state("");
+  statusError = $state("");
+  thxReadError = $state("");
   notice = $state("");
   verifyOutput = $state("");
   private refreshEpoch = 0;
   private pending = 0;
+  private defaultEqApplied = false;
 
   get thxError(): string {
-    return this.thx?.error ?? "";
+    return this.thx?.error ?? this.thxReadError;
+  }
+
+  private async applyDefaultEqOnce() {
+    if (this.defaultEqApplied || !this.status?.connected) return;
+    this.defaultEqApplied = true;
+    this.pending += 1;
+    this.busy = true;
+    try {
+      await api.setEqGains([...DEFAULT_EQ_GAINS]);
+      this.notice = "默认 EQ 已写入";
+    } catch (error) {
+      // Allow the next reconnect/poll to retry after a transient failure.
+      this.defaultEqApplied = false;
+      this.error = `默认 EQ 写入失败：${errorText(error)}`;
+    } finally {
+      this.pending -= 1;
+      this.busy = this.pending > 0;
+    }
   }
 
   private settle(epoch: number, apply: () => void) {
@@ -34,28 +56,41 @@ export class DeviceStore {
     if (!silent) {
       this.loading = true;
       this.error = "";
+      this.statusError = "";
+      this.thxReadError = "";
       this.notice = "";
     }
     try {
       try {
         const status = await api.getStatus();
-        this.settle(epoch, () => (this.status = status));
+        this.settle(epoch, () => {
+          this.status = status;
+          this.statusError = "";
+          if (!status.connected) {
+            this.defaultEqApplied = false;
+          } else {
+            void this.applyDefaultEqOnce();
+          }
+        });
       } catch (error) {
         this.settle(epoch, () => {
           if (!silent) {
             this.status = null;
-            this.error = `无法读取耳机：${errorText(error)}`;
+            this.statusError = `无法读取耳机：${errorText(error)}`;
           }
         });
       }
       try {
         const thx = await api.getThxStatus();
-        this.settle(epoch, () => (this.thx = thx));
+        this.settle(epoch, () => {
+          this.thx = thx;
+          this.thxReadError = "";
+        });
       } catch (error) {
         this.settle(epoch, () => {
           if (!silent) {
             this.thx = null;
-            this.error = this.error || `无法读取 THX：${errorText(error)}`;
+            this.thxReadError = `无法读取 THX：${errorText(error)}`;
           }
         });
       }
@@ -75,7 +110,7 @@ export class DeviceStore {
   }
 
   async setSidetone(enabled: boolean) {
-    await this.run(() => api.setSidetone(enabled), enabled ? "侧音已开启" : "侧音已关闭");
+    return this.run(() => api.setSidetone(enabled), enabled ? "侧音已开启" : "侧音已关闭");
   }
 
   async setEqPreset(preset: string, label: string) {
@@ -92,11 +127,12 @@ export class DeviceStore {
   }
 
   async setNormalizationEnabled(enabled: boolean) {
-    await this.run(
+    const ok = await this.run(
       () => api.setNormalizationEnabled(enabled),
       enabled ? "声音标准化已开启" : "声音标准化已关闭"
     );
     await this.refreshThx();
+    return ok;
   }
 
   async setSpatial(enabled: boolean) {
@@ -170,11 +206,14 @@ export class DeviceStore {
     const epoch = ++this.refreshEpoch;
     try {
       const thx = await api.getThxStatus();
-      this.settle(epoch, () => (this.thx = thx));
+      this.settle(epoch, () => {
+        this.thx = thx;
+        this.thxReadError = "";
+      });
     } catch (error) {
       this.settle(epoch, () => {
         this.thx = null;
-        this.error = `无法读取 THX：${errorText(error)}`;
+        this.thxReadError = `无法读取 THX：${errorText(error)}`;
       });
     }
   }
