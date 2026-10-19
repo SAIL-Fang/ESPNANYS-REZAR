@@ -10,6 +10,8 @@
 
   function linkText(): string {
     switch (device.status?.link) {
+      case "standby":
+        return "耳机未开机";
       case "wireless":
         return "无线 2.4G";
       case "wired":
@@ -27,7 +29,9 @@
     <h1>设备</h1>
     <p>连接、电量、固件和硬件开关。所有 HID 读取都由 SAIL 自己完成。</p>
   </div>
-  <span class="badge" class:ok={device.status?.connected}>{device.status?.connected ? "在线" : "离线"}</span>
+  <span class="badge" class:ok={device.status?.connected} class:warn={device.status?.link === "standby"}>
+    {device.status?.link === "standby" ? "待开机" : device.status?.connected ? "在线" : "离线"}
+  </span>
 </div>
 
 <section class="panel">

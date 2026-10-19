@@ -198,11 +198,11 @@
         <h3 id="status-title">耳机状态</h3>
       </div>
       <span class="badge" class:ok={device.status?.connected}>
-        {chargingText(device.status?.charging)}
+        {device.status?.link === "standby" ? "耳机未开机" : chargingText(device.status?.charging)}
       </span>
     </div>
     <dl class="kv">
-      <dt>链路</dt><dd>{device.status?.link === "wired" ? "有线 USB" : device.status?.link === "wireless" ? "无线 2.4G" : "—"}</dd>
+      <dt>链路</dt><dd>{device.status?.link === "standby" ? "耳机未开机" : device.status?.link === "wired" ? "有线 USB" : device.status?.link === "wireless" ? "无线 2.4G" : "—"}</dd>
       <dt>电量</dt><dd>{fieldText(device.status?.battery, "%")}</dd>
       <dt>固件</dt><dd>{fieldText(device.status?.firmware)}</dd>
     </dl>

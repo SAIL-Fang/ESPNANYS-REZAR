@@ -118,6 +118,7 @@ button:focus-visible, input:focus-visible {
 
 .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--sail-faint); }
 .dot.on { background: var(--sail-green); box-shadow: 0 0 0 3px rgba(22, 132, 95, 0.1); }
+.dot.standby { background: #e5484d; box-shadow: 0 0 0 3px rgba(229, 72, 77, 0.12); }
 .dot.warn { background: #c38b2d; box-shadow: 0 0 0 3px rgba(195, 139, 45, 0.1); }
 
 .main-surface {

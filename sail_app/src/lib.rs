@@ -79,6 +79,10 @@ impl<T> Field<T> {
 #[serde(rename_all = "camelCase")]
 pub enum Link {
     Disconnected,
+    /// The wireless receiver is present, but the headset itself did not answer
+    /// the battery/charging handshake. This is the "receiver plugged in, headset
+    /// powered off" state Razer shows as a red power icon.
+    Standby,
     Wireless,
     Wired,
     Unknown,
@@ -88,6 +92,7 @@ impl Link {
     pub fn label(self) -> &'static str {
         match self {
             Self::Disconnected => "disconnected",
+            Self::Standby => "standby",
             Self::Wireless => "wireless",
             Self::Wired => "wired",
             Self::Unknown => "unknown",
@@ -127,6 +132,26 @@ impl DeviceSnapshot {
             edition: Field::Error(reason.clone()),
             audio_output: audio_route::current_output(),
             issues: vec![reason],
+        }
+    }
+
+    /// The dongle is alive but the headset did not answer its own battery /
+    /// charging handshake. Keep the receiver visible while making it explicit
+    /// that the headset is off, instead of reporting a fake wireless link.
+    fn standby(link: Link, battery: Field<u8>, charging: Field<bool>, issues: Vec<String>) -> Self {
+        Self {
+            connected: false,
+            link,
+            battery,
+            charging,
+            firmware: Field::Timeout,
+            serial: Field::Timeout,
+            auto_power_off_min: Field::Timeout,
+            dongle_led: Field::Timeout,
+            speaker_preset_eq: Field::Timeout,
+            edition: Field::Timeout,
+            audio_output: audio_route::current_output(),
+            issues,
         }
     }
 }
@@ -475,7 +500,23 @@ impl SailApp {
         }
         let mut issues = Vec::new();
         let mut battery = read_u8(&mut device, Command::Battery, &mut issues);
-        let mut charging = read_bool(&mut device, Command::Charging, &mut issues);
+        // Wireless handshake: the receiver opens even when the headset is off.
+        // Battery/charging are headset-side commands, so if both time out the
+        // headset is not powered on. Stop after two short probes instead of
+        // waiting for every unrelated command to time out.
+        let mut charging_probe = None;
+        if link == Link::Wireless && !battery.is_known() {
+            let charging = read_bool(&mut device, Command::Charging, &mut issues);
+            if !charging.is_known() {
+                issues.push("headset handshake: battery/charging timed out".into());
+                return DeviceSnapshot::standby(Link::Standby, battery, charging, issues);
+            }
+            charging_probe = Some(charging);
+        }
+        let mut charging = match charging_probe {
+            Some(charging) => charging,
+            None => read_bool(&mut device, Command::Charging, &mut issues),
+        };
         if let Some(event) = cached_event {
             apply_event(&event, &mut battery, &mut charging);
             remember_event(&event);
@@ -771,5 +812,23 @@ mod tests {
         assert!(!snapshot.connected);
         assert_eq!(snapshot.link, Link::Disconnected);
         assert!(matches!(snapshot.battery, Field::Error(_)));
+    }
+
+    #[test]
+    fn standby_snapshot_keeps_receiver_but_is_offline() {
+        let snapshot = DeviceSnapshot::standby(
+            Link::Standby,
+            Field::Timeout,
+            Field::Timeout,
+            vec!["headset handshake: timeout".into()],
+        );
+        assert!(!snapshot.connected);
+        assert_eq!(snapshot.link, Link::Standby);
+        assert!(matches!(snapshot.battery, Field::Timeout));
+        assert!(matches!(snapshot.firmware, Field::Timeout));
+        assert_eq!(
+            serde_json::to_string(&Link::Standby).unwrap(),
+            "\"standby\""
+        );
     }
 }

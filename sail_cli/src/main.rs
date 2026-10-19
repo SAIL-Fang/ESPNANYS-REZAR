@@ -249,6 +249,7 @@ fn field_display<T: std::fmt::Display>(field: &Field<T>) -> String {
 fn link_display(link: Link) -> &'static str {
     match link {
         Link::Disconnected => "disconnected",
+        Link::Standby => "standby",
         Link::Wireless => "wireless",
         Link::Wired => "wired",
         Link::Unknown => "unknown",

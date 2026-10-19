@@ -40,6 +40,7 @@
 
   function linkText(): string {
     if (!device.status) return "未连接";
+    if (device.status.link === "standby") return "耳机未开机";
     if (device.status.link === "wireless") return "无线已连接";
     if (device.status.link === "wired") return "有线已连接";
     return device.status.connected ? "已连接" : "未连接";
@@ -49,8 +50,11 @@
 <header class="status-strip">
   <div class="topbar-context">ESPNANYS-REZAR <span>›</span> <b>{label}</b></div>
   <div class="status-item">
-    <span class="dot" class:on={device.status?.connected}></span>
+    <span class="dot" class:on={device.status?.connected} class:standby={device.status?.link === "standby"} class:warn={wiredNotReady}></span>
     <strong>{device.loading ? "读取中…" : linkText()}</strong>
+    {#if device.status?.link === "standby"}
+      <span class="badge warn">请开机</span>
+    {/if}
     {#if wiredNotReady}
       <span class="badge warn">控制未就绪</span>
     {/if}

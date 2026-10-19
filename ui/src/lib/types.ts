@@ -10,7 +10,7 @@ export type Field<T> =
   | { state: "timeout" }
   | { state: "error"; value: string };
 
-export type Link = "disconnected" | "wireless" | "wired" | "unknown";
+export type Link = "disconnected" | "standby" | "wireless" | "wired" | "unknown";
 
 export type AudioEndpoint = {
   id: string;
