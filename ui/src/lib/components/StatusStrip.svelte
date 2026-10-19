@@ -8,6 +8,7 @@
   import { onMount } from "svelte";
   import { device } from "$lib/device.svelte";
   import { fieldText, known } from "$lib/types";
+  import { deriveUiState } from "$lib/ui-state";
 
   interface Props {
     label?: string;
@@ -32,10 +33,10 @@
   let battery = $derived(known(device.status?.battery, 0));
   let batteryOn = $derived(Math.max(0, Math.min(5, Math.round(battery / 20))));
   let audioOk = $derived(device.status?.audioOutput?.isHeadset !== false);
-  let wiredNotReady = $derived(
-    device.status?.link === "wired" &&
-      (device.status.battery.state !== "known" || device.status.charging.state !== "known")
+  let uiState = $derived(
+    deriveUiState({ status: device.status, thx: device.thx, loading: device.loading })
   );
+  let wiredNotReady = $derived(uiState.wiredNotReady);
   let charging = $derived(
     device.status?.charging.state === "known" && device.status.charging.value
   );

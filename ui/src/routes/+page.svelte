@@ -15,6 +15,7 @@
   import SettingsPanel from "$lib/components/SettingsPanel.svelte";
   import AudioRouteGate from "$lib/components/AudioRouteGate.svelte";
   import HeadsetPowerGate from "$lib/components/HeadsetPowerGate.svelte";
+  import { deriveUiState } from "$lib/ui-state";
 
   type Tab = "device" | "sound" | "demo" | "mic" | "settings";
 
@@ -43,7 +44,10 @@
 
   let batteryText = $derived(fieldText(device.status?.battery, "%"));
   let chargeText = $derived(chargingText(device.status?.charging));
-  let powerBlocked = $derived(!!device.status && device.status.connected === false);
+  let uiState = $derived(
+    deriveUiState({ status: device.status, thx: device.thx, loading: device.loading })
+  );
+  let powerBlocked = $derived(uiState.powerBlocked);
 </script>
 
 <div class="app-shell">
@@ -85,11 +89,11 @@
     <StatusStrip label={sectionLabel} />
 
     <div class="page-content" inert={powerBlocked}>
-      {#if device.status?.audioOutput && device.status.audioOutput.isHeadset === false}
+      {#if uiState.outputBlocked}
         <div class="route-warning">
           <strong>默认输出不是 Razer 耳机</strong>
           <span>
-            当前：{device.status.audioOutput.name ?? "未知设备"}。
+            当前：{device.status?.audioOutput.name ?? "未知设备"}。
             请先在 Windows 声音设置里把 BlackShark 设为默认输出；THX 功能暂不可用，HID 设置仍可用。
           </span>
         </div>

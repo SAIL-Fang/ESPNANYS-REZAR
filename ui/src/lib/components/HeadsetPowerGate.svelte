@@ -7,17 +7,17 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { device } from "$lib/device.svelte";
+  import { deriveUiState } from "$lib/ui-state";
 
   let checking = $state(false);
 
-  let blocked = $derived(!!device.status && device.status.connected === false);
-  let standby = $derived(device.status?.link === "standby");
-  let title = $derived(standby ? "耳机未开机" : "耳机未连接");
-  let detail = $derived(
-    standby
-      ? "接收器仍连接，但耳机本体没有响应。请打开耳机电源；应用会自动恢复。"
-      : "没有检测到耳机或接收器。请检查连接后再试。"
+  let uiState = $derived(
+    deriveUiState({ status: device.status, thx: device.thx, loading: device.loading })
   );
+  let blocked = $derived(uiState.powerBlocked);
+  let standby = $derived(uiState.kind === "headset_off");
+  let title = $derived(uiState.powerTitle);
+  let detail = $derived(uiState.powerDetail);
 
   async function autoReconnect() {
     if (!blocked) return;

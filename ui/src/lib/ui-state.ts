@@ -1,0 +1,115 @@
+/**
+ * ESPNANYS-REZAR — open-source Razer BlackShark V2 HyperSpeed control app
+ * Author: SAIL
+ * Copyright (c) 2026 SAIL
+ * SPDX-License-Identifier: MIT
+ *
+ * One pure state derivation for every blocking/usable UI surface. Components
+ * must not independently combine connected/link/audio/THX conditions.
+ */
+import type { DeviceSnapshot, ThxSnapshot } from "./types";
+
+export type UiStateKind =
+  | "booting"
+  | "no_receiver"
+  | "headset_off"
+  | "output_wrong"
+  | "thx_unavailable"
+  | "ready";
+
+export interface UiState {
+  kind: UiStateKind;
+  /** Full-screen power/receiver gate. */
+  powerBlocked: boolean;
+  /** Audio-route blocking dialog. Never true at the same time as powerBlocked. */
+  outputBlocked: boolean;
+  /** Settings writes are allowed by the UI. Backend still re-checks HID. */
+  canWrite: boolean;
+  powerTitle: string;
+  powerDetail: string;
+  wiredNotReady: boolean;
+}
+
+export interface UiStateInput {
+  status: DeviceSnapshot | null;
+  thx: ThxSnapshot | null;
+  loading: boolean;
+}
+
+const POWER_COPY: Record<"standby" | "missing", { title: string; detail: string }> = {
+  standby: {
+    title: "耳机未开机",
+    detail: "接收器仍连接，但耳机本体没有响应。请打开耳机电源；应用会自动恢复。"
+  },
+  missing: {
+    title: "耳机未连接",
+    detail: "没有检测到耳机或接收器。请检查连接后再试。"
+  }
+};
+
+export function deriveUiState({ status, thx, loading }: UiStateInput): UiState {
+  if (!status) {
+    return {
+      kind: loading ? "booting" : "no_receiver",
+      powerBlocked: !loading,
+      outputBlocked: false,
+      canWrite: false,
+      powerTitle: loading ? "正在检测设备" : POWER_COPY.missing.title,
+      powerDetail: loading ? "请稍候。" : POWER_COPY.missing.detail,
+      wiredNotReady: false
+    };
+  }
+
+  const wiredNotReady =
+    status.link === "wired" &&
+    (status.battery.state !== "known" || status.charging.state !== "known");
+
+  if (!status.connected) {
+    const standby = status.link === "standby";
+    const copy = standby ? POWER_COPY.standby : POWER_COPY.missing;
+    return {
+      kind: standby ? "headset_off" : "no_receiver",
+      powerBlocked: true,
+      outputBlocked: false,
+      canWrite: false,
+      powerTitle: copy.title,
+      powerDetail: copy.detail,
+      wiredNotReady
+    };
+  }
+
+  if (status.audioOutput.isHeadset === false) {
+    return {
+      kind: "output_wrong",
+      powerBlocked: false,
+      outputBlocked: true,
+      canWrite: false,
+      powerTitle: "",
+      powerDetail: "",
+      wiredNotReady
+    };
+  }
+
+  const thxReady = !!thx?.installed && !thx.error;
+  if (!thxReady) {
+    return {
+      kind: "thx_unavailable",
+      powerBlocked: false,
+      outputBlocked: false,
+      canWrite: true,
+      powerTitle: "",
+      powerDetail: "",
+      wiredNotReady
+    };
+  }
+
+  return {
+    kind: "ready",
+    powerBlocked: false,
+    outputBlocked: false,
+    canWrite: true,
+    powerTitle: "",
+    powerDetail: "",
+    wiredNotReady
+  };
+}

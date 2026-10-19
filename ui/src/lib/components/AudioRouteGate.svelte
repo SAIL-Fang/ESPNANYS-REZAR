@@ -6,6 +6,7 @@
 -->
 <script lang="ts">
   import { device } from "$lib/device.svelte";
+  import { deriveUiState } from "$lib/ui-state";
 
   let busy = $state(false);
   let error = $state("");
@@ -13,11 +14,10 @@
   let endpoints = $derived(device.status?.audioOutput?.endpoints ?? []);
   let current = $derived(device.status?.audioOutput?.name ?? "未知设备");
   let target = $derived(endpoints.find((endpoint) => endpoint.isHeadset) ?? null);
-  let blocked = $derived(
-    !!device.status?.audioOutput &&
-      device.status.audioOutput.isHeadset === false &&
-      device.status.connected !== false
+  let uiState = $derived(
+    deriveUiState({ status: device.status, thx: device.thx, loading: device.loading })
   );
+  let blocked = $derived(uiState.outputBlocked);
 
   async function apply() {
     if (!target || busy) return;
