@@ -66,19 +66,14 @@ where
         .map_err(|error| format!("background task failed: {error}"))?
 }
 
-/// Writes are rejected even if a queued click raced the last status refresh.
+/// Run write work off the Tauri thread. The online gate now lives inside
+/// `SailApp`, so this adapter must not perform a second HID handshake.
 async fn blocking_write<T, F>(work: F) -> Result<T, String>
 where
     T: Send + 'static,
     F: FnOnce() -> Result<T, String> + Send + 'static,
 {
-    blocking(move || {
-        app()
-            .require_online()
-            .map_err(|error| error.to_string())?;
-        work()
-    })
-    .await
+    blocking(work).await
 }
 
 #[tauri::command]

@@ -93,6 +93,59 @@ fn run(mut args: Vec<String>) -> Result<(), Box<dyn std::error::Error>> {
             println!("default audio output switched");
             return Ok(());
         }
+        "sidetone" => {
+            let value = args.get(1).ok_or("sidetone needs on|off")?;
+            let enabled = match value.as_str() {
+                "on" => true,
+                "off" => false,
+                _ => return Err("sidetone needs on|off".into()),
+            };
+            SailApp::with_pid(pid)
+                .set_sidetone(enabled)
+                .map_err(std::io::Error::other)?;
+            println!("sidetone {}", if enabled { "on" } else { "off" });
+            return Ok(());
+        }
+        "sidetone-volume" => {
+            let value = parse_u8(args.get(1).ok_or("sidetone-volume needs 0..15")?)?;
+            if value > 15 {
+                return Err("sidetone-volume is 0..15".into());
+            }
+            SailApp::with_pid(pid)
+                .set_sidetone_volume(value)
+                .map_err(std::io::Error::other)?;
+            println!("sidetone-volume {value}");
+            return Ok(());
+        }
+        "eq-preset" => {
+            let value = args
+                .get(1)
+                .ok_or("eq-preset needs game|music|cinema|custom|N")?;
+            let preset = parse_preset(value)?;
+            SailApp::with_pid(pid)
+                .set_eq_preset(value)
+                .map_err(std::io::Error::other)?;
+            println!("eq-preset {:?} ({})", preset, preset.code());
+            return Ok(());
+        }
+        "eq-gains" => {
+            let values = &args[1..];
+            if values.len() != 10 {
+                return Err("eq-gains needs 10 signed values".into());
+            }
+            let mut gains = [0i8; 10];
+            for (slot, value) in gains.iter_mut().zip(values) {
+                *slot = value.parse::<i8>()?;
+                if !(-12..=12).contains(slot) {
+                    return Err("each EQ gain must be -12..12".into());
+                }
+            }
+            SailApp::with_pid(pid)
+                .set_eq_gains(gains)
+                .map_err(std::io::Error::other)?;
+            println!("eq-gains {gains:?}");
+            return Ok(());
+        }
         "mic-status" if pid.is_none() => {
             let capture = SailApp::new().thx_snapshot().capture;
             println!(
@@ -102,10 +155,8 @@ fn run(mut args: Vec<String>) -> Result<(), Box<dyn std::error::Error>> {
             return Ok(());
         }
         "mic-gate" | "mic-nr" | "mic-norm" | "mic-clarity" | "mic-eq" | "mic-eq-toggle"
-        | "mic-volume" | "mic-preview" | "mic-sidetone"
-            if pid.is_none() =>
-        {
-            SailApp::new()
+        | "mic-volume" | "mic-preview" | "mic-sidetone" => {
+            SailApp::with_pid(pid)
                 .mic_command(&args)
                 .map_err(std::io::Error::other)?;
             println!("{command} ok");
@@ -128,47 +179,6 @@ fn run(mut args: Vec<String>) -> Result<(), Box<dyn std::error::Error>> {
         ),
         "firmware" => println!("{}", get_string(&mut device, Command::Firmware)?),
         "serial" => println!("{}", get_string(&mut device, Command::Serial)?),
-        "sidetone" => {
-            let value = args.get(1).ok_or("sidetone needs on|off")?;
-            let enabled = match value.as_str() {
-                "on" => true,
-                "off" => false,
-                _ => return Err("sidetone needs on|off".into()),
-            };
-            device.set_sidetone(enabled)?;
-            println!("sidetone {}", if enabled { "on" } else { "off" });
-        }
-        "sidetone-volume" => {
-            let value = parse_u8(args.get(1).ok_or("sidetone-volume needs 0..15")?)?;
-            if value > 15 {
-                return Err("sidetone-volume is 0..15".into());
-            }
-            device.set_sidetone_volume(value)?;
-            println!("sidetone-volume {value}");
-        }
-        "eq-preset" => {
-            let value = args
-                .get(1)
-                .ok_or("eq-preset needs game|music|cinema|custom|N")?;
-            let preset = parse_preset(value)?;
-            device.set_speaker_eq_preset(preset)?;
-            println!("eq-preset {:?} ({})", preset, preset.code());
-        }
-        "eq-gains" => {
-            let values = &args[1..];
-            if values.len() != 10 {
-                return Err("eq-gains needs 10 signed values".into());
-            }
-            let mut gains = [0i8; 10];
-            for (slot, value) in gains.iter_mut().zip(values) {
-                *slot = value.parse::<i8>()?;
-                if !(-12..=12).contains(slot) {
-                    return Err("each EQ gain must be -12..12".into());
-                }
-            }
-            device.set_speaker_eq_gains(&gains)?;
-            println!("eq-gains {gains:?}");
-        }
         "watch" => {
             let count = args
                 .iter()

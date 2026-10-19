@@ -16,7 +16,9 @@ use sail_core::{
     parse_event, Command, Error as CoreError, Event, SailDevice, SpeakerEqPreset, Transport,
     FRAME_LEN,
 };
-use sail_hid::{HidTransport, ModelDescriptor, PID_WIRED, PID_WIRELESS};
+use sail_hid::{
+    model_for_product_id, HidDevice, HidTransport, ModelDescriptor, PID_WIRED, PID_WIRELESS,
+};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::io::Read;
@@ -46,6 +48,96 @@ fn hid_lock() -> std::sync::MutexGuard<'static, ()> {
         .get_or_init(|| Mutex::new(()))
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
+/// The write surface used by the online gate. Keeping this private means
+/// callers cannot accidentally reach HID without the handshake.
+trait HidWrite {
+    fn set_sidetone(&mut self, enabled: bool) -> Result<(), CoreError>;
+    fn set_sidetone_volume(&mut self, value: u8) -> Result<(), CoreError>;
+    fn set_speaker_eq_preset(&mut self, preset: SpeakerEqPreset) -> Result<(), CoreError>;
+    fn set_speaker_eq_gains(&mut self, gains: &[i8; 10]) -> Result<(), CoreError>;
+}
+
+/// A testable seam around the online handshake and the write session. The
+/// production adapter opens one transport, proves the headset is awake, then
+/// lets the closure write through that same session.
+trait HidAccess: Send {
+    fn check_online(&self) -> Result<(), SailError>;
+    fn write_online(
+        &self,
+        write: &mut dyn FnMut(&mut dyn HidWrite) -> Result<(), SailError>,
+    ) -> Result<(), SailError>;
+}
+
+struct RealHidAccess {
+    pid: Option<u16>,
+}
+
+struct RealHidWrite<'a> {
+    device: &'a mut HidDevice,
+}
+
+impl HidWrite for RealHidWrite<'_> {
+    fn set_sidetone(&mut self, enabled: bool) -> Result<(), CoreError> {
+        self.device.set_sidetone(enabled)
+    }
+
+    fn set_sidetone_volume(&mut self, value: u8) -> Result<(), CoreError> {
+        self.device.set_sidetone_volume(value)
+    }
+
+    fn set_speaker_eq_preset(&mut self, preset: SpeakerEqPreset) -> Result<(), CoreError> {
+        self.device.set_speaker_eq_preset(preset)
+    }
+
+    fn set_speaker_eq_gains(&mut self, gains: &[i8; 10]) -> Result<(), CoreError> {
+        self.device.set_speaker_eq_gains(gains)
+    }
+}
+
+fn open_online_device(pid: Option<u16>) -> Result<(HidDevice, bool), SailError> {
+    let transport = HidTransport::open(pid).map_err(|_| SailError::NoReceiver)?;
+    let model = model_for_product_id(transport.info().product_id)
+        .ok_or(SailError::NoReceiver)?
+        .clone();
+    let wired = model.wired_pid == Some(transport.info().product_id);
+    let base = SailDevice::new(transport).with_timeout(Duration::from_millis(600));
+    let mut device = if wired {
+        base.with_get_flags(0x00)
+    } else {
+        base
+    };
+
+    if wired {
+        return Ok((device, true));
+    }
+
+    if device.get(Command::Battery).is_ok() || device.get(Command::Charging).is_ok() {
+        Ok((device, false))
+    } else {
+        Err(SailError::HeadsetOff)
+    }
+}
+
+impl HidAccess for RealHidAccess {
+    fn check_online(&self) -> Result<(), SailError> {
+        let _guard = hid_lock();
+        let _ = open_online_device(self.pid)?;
+        Ok(())
+    }
+
+    fn write_online(
+        &self,
+        write: &mut dyn FnMut(&mut dyn HidWrite) -> Result<(), SailError>,
+    ) -> Result<(), SailError> {
+        let _guard = hid_lock();
+        let (mut device, _wired) = open_online_device(self.pid)?;
+        let mut writer = RealHidWrite {
+            device: &mut device,
+        };
+        write(&mut writer)
+    }
 }
 
 /// Remember an async event for later snapshots. Reading the feature-report
@@ -259,6 +351,8 @@ pub enum SailError {
     Device(CoreError),
     Invalid(String),
     Thx(String),
+    NoReceiver,
+    HeadsetOff,
 }
 
 impl fmt::Display for SailError {
@@ -267,6 +361,8 @@ impl fmt::Display for SailError {
             Self::Device(error) => write!(f, "{error}"),
             Self::Invalid(reason) => write!(f, "{reason}"),
             Self::Thx(reason) => write!(f, "{reason}"),
+            Self::NoReceiver => write!(f, "未检测到耳机接收器，设置已锁定"),
+            Self::HeadsetOff => write!(f, "耳机未开机，设置已锁定；请先打开耳机电源"),
         }
     }
 }
@@ -462,6 +558,7 @@ fn find_thx_helper() -> Option<PathBuf> {
 
 pub struct SailApp {
     thx: Box<dyn ThxHost>,
+    hid: Box<dyn HidAccess>,
 }
 
 impl Default for SailApp {
@@ -472,13 +569,29 @@ impl Default for SailApp {
 
 impl SailApp {
     pub fn new() -> Self {
+        Self::with_pid(None)
+    }
+
+    /// Same public write surface, but binds the gate to a caller-selected PID.
+    /// This is used by the CLI diagnostic path and by tests; the UI uses the
+    /// default selector.
+    pub fn with_pid(pid: Option<u16>) -> Self {
         Self {
             thx: Box::new(ProcessThxHost::new()),
+            hid: Box::new(RealHidAccess { pid }),
         }
     }
 
     pub fn with_thx(host: Box<dyn ThxHost>) -> Self {
-        Self { thx: host }
+        Self {
+            thx: host,
+            hid: Box::new(RealHidAccess { pid: None }),
+        }
+    }
+
+    #[cfg(test)]
+    fn with_parts(hid: Box<dyn HidAccess>, thx: Box<dyn ThxHost>) -> Self {
+        Self { thx, hid }
     }
 
     /// Read every field independently. A single timeout or unsupported command
@@ -585,26 +698,11 @@ impl SailApp {
     /// Cheap write gate. The receiver can be open while the headset is off;
     /// never let a queued UI write touch EQ/sidetone/THX in that state.
     pub fn headset_online(&self) -> bool {
-        let _guard = hid_lock();
-        let Ok(transport) = HidTransport::open(None) else {
-            return false;
-        };
-        let wired = transport.info().product_id == PID_WIRED;
-        let mut device = SailDevice::new(transport).with_timeout(Duration::from_millis(600));
-        if wired {
-            return true;
-        }
-        device.get(Command::Battery).is_ok() || device.get(Command::Charging).is_ok()
+        self.require_online().is_ok()
     }
 
     pub fn require_online(&self) -> Result<(), SailError> {
-        if self.headset_online() {
-            Ok(())
-        } else {
-            Err(SailError::Invalid(
-                "耳机未开机，设置已锁定；请先打开耳机电源".into(),
-            ))
-        }
+        self.hid.check_online()
     }
 
     pub fn set_default_audio_output(&self, device_id: Option<&str>) -> Result<(), String> {
@@ -617,54 +715,57 @@ impl SailApp {
     }
 
     pub fn set_sidetone(&self, enabled: bool) -> Result<(), SailError> {
-        let _guard = hid_lock();
-        let mut device = sail_hid::open_device(None)?;
-        device.set_sidetone(enabled)?;
-        Ok(())
+        self.hid
+            .write_online(&mut |device| device.set_sidetone(enabled).map_err(SailError::Device))
     }
 
     pub fn set_sidetone_volume(&self, value: u8) -> Result<(), SailError> {
         if value > 15 {
             return Err(SailError::Invalid("sidetone-volume is 0..15".into()));
         }
-        let _guard = hid_lock();
-        let mut device = sail_hid::open_device(None)?;
-        device.set_sidetone_volume(value)?;
-        Ok(())
+        self.hid.write_online(&mut |device| {
+            device.set_sidetone_volume(value).map_err(SailError::Device)
+        })
     }
 
     pub fn set_eq_preset(&self, preset: &str) -> Result<(), SailError> {
         let preset = SpeakerEqPreset::from_name(preset)
             .ok_or_else(|| SailError::Invalid(format!("unknown EQ preset: {preset}")))?;
-        let _guard = hid_lock();
-        let mut device = sail_hid::open_device(None)?;
-        device.set_speaker_eq_preset(preset)?;
-        Ok(())
+        self.hid.write_online(&mut |device| {
+            device
+                .set_speaker_eq_preset(preset)
+                .map_err(SailError::Device)
+        })
     }
 
     pub fn set_eq_gains(&self, gains: [i8; 10]) -> Result<(), SailError> {
         if gains.iter().any(|gain| !(-12..=12).contains(gain)) {
             return Err(SailError::Invalid("EQ gains must be -12..12".into()));
         }
-        let _guard = hid_lock();
-        let mut device = sail_hid::open_device(None)?;
-        device.set_speaker_eq_gains(&gains)?;
-        Ok(())
+        self.hid.write_online(&mut |device| {
+            device
+                .set_speaker_eq_gains(&gains)
+                .map_err(SailError::Device)
+        })
     }
 
     pub fn set_thx_level(&self, level: i32) -> Result<(), SailError> {
+        self.require_online()?;
         self.thx.set_level(level).map_err(SailError::Thx)
     }
 
     pub fn set_thx_enabled(&self, enabled: bool) -> Result<(), SailError> {
+        self.require_online()?;
         self.thx.set_enabled(enabled).map_err(SailError::Thx)
     }
 
     pub fn set_thx_spatial(&self, enabled: bool) -> Result<(), SailError> {
+        self.require_online()?;
         self.thx.set_spatial(enabled).map_err(SailError::Thx)
     }
 
     pub fn verify_thx(&self) -> Result<String, SailError> {
+        self.require_online()?;
         self.thx.verify().map_err(SailError::Thx)
     }
 
@@ -673,10 +774,12 @@ impl SailApp {
     /// `mic-*` commands understood by `sail_thx`; the helper validates every
     /// range again.
     pub fn mic_command(&self, args: &[String]) -> Result<(), SailError> {
+        self.require_online()?;
         self.thx.mic(args).map_err(SailError::Thx)
     }
 
     pub fn start_mic_preview(&self) -> Result<(), SailError> {
+        self.require_online()?;
         self.thx.start_preview().map_err(SailError::Thx)
     }
 }
@@ -820,6 +923,108 @@ mod tests {
         }
     }
 
+    #[derive(Clone, Copy)]
+    enum FakeHidState {
+        Online,
+        NoReceiver,
+        HeadsetOff,
+    }
+
+    struct FakeHid {
+        state: FakeHidState,
+        writes: std::sync::Arc<std::sync::Mutex<Vec<String>>>,
+    }
+
+    struct FakeHidWrite<'a> {
+        writes: &'a std::sync::Arc<std::sync::Mutex<Vec<String>>>,
+    }
+
+    impl HidWrite for FakeHidWrite<'_> {
+        fn set_sidetone(&mut self, enabled: bool) -> Result<(), CoreError> {
+            self.writes
+                .lock()
+                .unwrap()
+                .push(format!("sidetone:{enabled}"));
+            Ok(())
+        }
+
+        fn set_sidetone_volume(&mut self, value: u8) -> Result<(), CoreError> {
+            self.writes
+                .lock()
+                .unwrap()
+                .push(format!("sidetone-volume:{value}"));
+            Ok(())
+        }
+
+        fn set_speaker_eq_preset(&mut self, preset: SpeakerEqPreset) -> Result<(), CoreError> {
+            self.writes
+                .lock()
+                .unwrap()
+                .push(format!("eq-preset:{}", preset.code()));
+            Ok(())
+        }
+
+        fn set_speaker_eq_gains(&mut self, gains: &[i8; 10]) -> Result<(), CoreError> {
+            self.writes
+                .lock()
+                .unwrap()
+                .push(format!("eq-gains:{gains:?}"));
+            Ok(())
+        }
+    }
+
+    impl HidAccess for FakeHid {
+        fn check_online(&self) -> Result<(), SailError> {
+            match self.state {
+                FakeHidState::Online => Ok(()),
+                FakeHidState::NoReceiver => Err(SailError::NoReceiver),
+                FakeHidState::HeadsetOff => Err(SailError::HeadsetOff),
+            }
+        }
+
+        fn write_online(
+            &self,
+            write: &mut dyn FnMut(&mut dyn HidWrite) -> Result<(), SailError>,
+        ) -> Result<(), SailError> {
+            self.check_online()?;
+            let mut writer = FakeHidWrite {
+                writes: &self.writes,
+            };
+            write(&mut writer)
+        }
+    }
+
+    fn fake_thx() -> Box<FakeThx> {
+        Box::new(FakeThx {
+            status: ThxSnapshot {
+                installed: true,
+                enabled: Some(true),
+                level: Some(10),
+                spatial_enabled: Some(true),
+                endpoint: Some("endpoint".into()),
+                dll: None,
+                dll_version: None,
+                abi: None,
+                capture: None,
+                error: None,
+            },
+        })
+    }
+
+    fn app_with_hid(
+        state: FakeHidState,
+    ) -> (SailApp, std::sync::Arc<std::sync::Mutex<Vec<String>>>) {
+        let writes = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let app = SailApp::with_parts(
+            Box::new(FakeHid {
+                state,
+                writes: writes.clone(),
+            }),
+            fake_thx(),
+        );
+        (app, writes)
+    }
+
     #[test]
     fn field_serializes_as_tagged_state() {
         let value = Field::Known(14u8);
@@ -848,6 +1053,39 @@ mod tests {
         let snapshot = app.thx_snapshot();
         assert!(snapshot.installed);
         assert_eq!(snapshot.level, Some(10));
+    }
+
+    #[test]
+    fn offline_hid_write_is_rejected_before_the_writer_runs() {
+        let (app, writes) = app_with_hid(FakeHidState::HeadsetOff);
+        let error = app.set_sidetone(true).unwrap_err();
+        assert!(matches!(error, SailError::HeadsetOff));
+        assert!(writes.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn missing_receiver_is_reported_as_no_receiver() {
+        let (app, writes) = app_with_hid(FakeHidState::NoReceiver);
+        let error = app.set_eq_gains([0; 10]).unwrap_err();
+        assert!(matches!(error, SailError::NoReceiver));
+        assert!(writes.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn online_hid_write_reaches_the_writer_once() {
+        let (app, writes) = app_with_hid(FakeHidState::Online);
+        app.set_eq_preset("music").unwrap();
+        let writes = writes.lock().unwrap();
+        assert_eq!(writes.len(), 1);
+        assert!(writes[0].starts_with("eq-preset:"));
+    }
+
+    #[test]
+    fn offline_thx_write_is_rejected_before_thx_is_called() {
+        let (app, writes) = app_with_hid(FakeHidState::HeadsetOff);
+        let error = app.set_thx_level(10).unwrap_err();
+        assert!(matches!(error, SailError::HeadsetOff));
+        assert!(writes.lock().unwrap().is_empty());
     }
 
     #[test]
