@@ -55,6 +55,21 @@ export function shouldAutoReconnect({
   return blocked && visible && focused && !busy;
 }
 
+export interface StatusPollPolicyInput {
+  visible: boolean;
+  focused: boolean;
+  offline: boolean;
+}
+
+/** The general status poll never runs in the background or while offline. */
+export function shouldPollStatus({
+  visible,
+  focused,
+  offline
+}: StatusPollPolicyInput): boolean {
+  return visible && focused && !offline;
+}
+
 const POWER_COPY: Record<"standby" | "missing", { title: string; detail: string }> = {
   standby: {
     title: "耳机未开机",

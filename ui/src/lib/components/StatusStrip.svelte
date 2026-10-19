@@ -8,7 +8,7 @@
   import { onMount } from "svelte";
   import { device } from "$lib/device.svelte";
   import { fieldText, known } from "$lib/types";
-  import { deriveUiState } from "$lib/ui-state";
+  import { deriveUiState, shouldPollStatus } from "$lib/ui-state";
 
   interface Props {
     label?: string;
@@ -22,9 +22,15 @@
     // SetDefaultRenderDevice and can briefly interrupt playback. THX state is
     // refreshed on startup, explicit refresh, and after THX writes.
     const timer = setInterval(() => {
-      if (document.hidden || !document.hasFocus()) return;
-      // The power gate owns reconnect polling while the headset is offline.
-      if (device.status && !device.status.connected) return;
+      if (
+        !shouldPollStatus({
+          visible: !document.hidden,
+          focused: document.hasFocus(),
+          offline: !!device.status && !device.status.connected
+        })
+      ) {
+        return;
+      }
       void device.refresh(true, false);
     }, 10_000);
     return () => clearInterval(timer);

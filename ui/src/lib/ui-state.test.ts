@@ -6,7 +6,7 @@
  */
 import test from "node:test";
 import assert from "node:assert/strict";
-import { deriveUiState, shouldAutoReconnect } from "./ui-state.ts";
+import { deriveUiState, shouldAutoReconnect, shouldPollStatus } from "./ui-state.ts";
 import type { AudioEndpoint, DeviceSnapshot, Field, Link, ThxSnapshot } from "./types";
 
 function field<T>(value: T): Field<T> {
@@ -226,4 +226,11 @@ test("reconnect only runs while blocked, visible, focused, and idle", () => {
     shouldAutoReconnect({ blocked: true, visible: true, focused: true, busy: true }),
     false
   );
+});
+
+test("status polling is foreground-only and ignores the offline gate", () => {
+  assert.equal(shouldPollStatus({ visible: true, focused: true, offline: false }), true);
+  assert.equal(shouldPollStatus({ visible: false, focused: true, offline: false }), false);
+  assert.equal(shouldPollStatus({ visible: true, focused: false, offline: false }), false);
+  assert.equal(shouldPollStatus({ visible: true, focused: true, offline: true }), false);
 });
