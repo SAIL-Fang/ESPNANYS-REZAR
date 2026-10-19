@@ -145,3 +145,15 @@ sail_app::profiles::all() -> &'static [&'static dyn ProfileFactory]
 - 现在不实现第二个型号
 - 不把 Razer/THX 二进制打包
 - 不为了“通用”而抽象掉当前协议细节；先把型号边界收干净
+
+## 7. 已落地（第一步）
+
+- `sail_hid::model`：
+  - `ModelDescriptor`
+  - `ModelCapabilities`
+  - `RAZER_BLACKSHARK_V2_HYPERSPEED`
+  - `UNKNOWN_MODEL`
+  - `model_for_product_id`
+- HID selector 改为通过 descriptor 匹配 VID/PID/usage/interface，不再直接读 Razer 常量。
+- `DeviceSnapshot.model` 已加入；CLI 输出 model，UI 侧栏使用 `model.displayName`，不再写死 “BlackShark V2 HS”。
+- 尚未落地：`HeadsetProfile` trait、按型号命令映射、THX `ThxProfile`、UI capability 驱动。

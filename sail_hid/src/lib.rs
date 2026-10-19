@@ -12,6 +12,12 @@ use sail_core::{Error, SailDevice, Transport, FRAME_LEN};
 use std::ffi::CString;
 use std::time::Duration;
 
+mod model;
+pub use model::{
+    model_for_product_id, unknown_model, ModelCapabilities, ModelDescriptor,
+    RAZER_BLACKSHARK_V2_HYPERSPEED, UNKNOWN_MODEL,
+};
+
 pub const RAZER_VID: u16 = 0x1532;
 pub const PID_WIRELESS: u16 = 0x0565;
 pub const PID_WIRED: u16 = 0x056E;
@@ -44,16 +50,24 @@ fn select_device(
     let mut candidates: Vec<HidInfo> = devices
         .into_iter()
         .filter(|device| {
-            device.vendor_id == RAZER_VID
-                && matches!(device.product_id, PID_WIRELESS | PID_WIRED)
+            let Some(profile) = model_for_product_id(device.product_id) else {
+                return false;
+            };
+            device.vendor_id == profile.vendor_id
                 && wanted.map_or(true, |pid| device.product_id == pid)
                 && (allow_any_usage
-                    || (device.usage_page == VENDOR_USAGE_PAGE && device.usage == VENDOR_USAGE))
+                    || (device.usage_page == profile.usage_page && device.usage == profile.usage))
         })
         .collect();
-    // Prefer the vendor control interface (3), then the wireless receiver.
+    // Prefer the profile's vendor control interface, then the wireless receiver.
     candidates.sort_by_key(|device| {
-        let interface_rank = if device.interface_number == 3 { 0 } else { 1 };
+        let profile = model_for_product_id(device.product_id);
+        let interface_rank =
+            if profile.map(|p| device.interface_number == p.interface_number) == Some(true) {
+                0
+            } else {
+                1
+            };
         let pid_rank = if device.product_id == PID_WIRELESS {
             0
         } else {
@@ -157,7 +171,9 @@ pub type HidDevice = SailDevice<HidTransport>;
 
 pub fn open_device(pid: Option<u16>) -> Result<HidDevice, Error> {
     let transport = HidTransport::open(pid)?;
-    let wired = transport.info().product_id == PID_WIRED;
+    let model = model_for_product_id(transport.info().product_id)
+        .ok_or_else(|| Error::Unsupported("unknown headset model".into()))?;
+    let wired = model.wired_pid == Some(transport.info().product_id);
     let device = SailDevice::new(transport);
     Ok(if wired {
         device.with_get_flags(0x00)

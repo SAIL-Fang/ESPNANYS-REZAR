@@ -16,7 +16,7 @@ use sail_core::{
     parse_event, Command, Error as CoreError, Event, SailDevice, SpeakerEqPreset, Transport,
     FRAME_LEN,
 };
-use sail_hid::{HidTransport, PID_WIRED, PID_WIRELESS};
+use sail_hid::{HidTransport, ModelDescriptor, PID_WIRED, PID_WIRELESS};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::io::Read;
@@ -105,6 +105,7 @@ impl Link {
 pub struct DeviceSnapshot {
     pub connected: bool,
     pub link: Link,
+    pub model: ModelDescriptor,
     pub battery: Field<u8>,
     pub charging: Field<bool>,
     pub firmware: Field<String>,
@@ -122,6 +123,7 @@ impl DeviceSnapshot {
         Self {
             connected: false,
             link: Link::Disconnected,
+            model: sail_hid::unknown_model().clone(),
             battery: Field::Error(reason.clone()),
             charging: Field::Error(reason.clone()),
             firmware: Field::Error(reason.clone()),
@@ -138,10 +140,17 @@ impl DeviceSnapshot {
     /// The dongle is alive but the headset did not answer its own battery /
     /// charging handshake. Keep the receiver visible while making it explicit
     /// that the headset is off, instead of reporting a fake wireless link.
-    fn standby(link: Link, battery: Field<u8>, charging: Field<bool>, issues: Vec<String>) -> Self {
+    fn standby(
+        link: Link,
+        model: ModelDescriptor,
+        battery: Field<u8>,
+        charging: Field<bool>,
+        issues: Vec<String>,
+    ) -> Self {
         Self {
             connected: false,
             link,
+            model,
             battery,
             charging,
             firmware: Field::Timeout,
@@ -485,6 +494,9 @@ impl SailApp {
             PID_WIRED => Link::Wired,
             _ => Link::Unknown,
         };
+        let model = sail_hid::model_for_product_id(transport.info().product_id)
+            .cloned()
+            .unwrap_or_else(|| sail_hid::unknown_model().clone());
         // The wired headset answers normal commands with silence, but caches
         // the last asynchronous event in feature report 2. Read it before any
         // command can overwrite that cache. Wireless uses the active GET path;
@@ -509,7 +521,13 @@ impl SailApp {
             let charging = read_bool(&mut device, Command::Charging, &mut issues);
             if !charging.is_known() {
                 issues.push("headset handshake: battery/charging timed out".into());
-                return DeviceSnapshot::standby(Link::Standby, battery, charging, issues);
+                return DeviceSnapshot::standby(
+                    Link::Standby,
+                    model.clone(),
+                    battery,
+                    charging,
+                    issues,
+                );
             }
             charging_probe = Some(charging);
         }
@@ -543,6 +561,7 @@ impl SailApp {
         DeviceSnapshot {
             connected: true,
             link,
+            model,
             battery,
             charging,
             firmware,
@@ -843,6 +862,7 @@ mod tests {
     fn standby_snapshot_keeps_receiver_but_is_offline() {
         let snapshot = DeviceSnapshot::standby(
             Link::Standby,
+            sail_hid::RAZER_BLACKSHARK_V2_HYPERSPEED.clone(),
             Field::Timeout,
             Field::Timeout,
             vec!["headset handshake: timeout".into()],

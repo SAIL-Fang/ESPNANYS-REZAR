@@ -19,9 +19,36 @@ export type AudioEndpoint = {
   isDefault: boolean;
 };
 
+export type ModelCapabilities = {
+  battery: boolean;
+  charging: boolean;
+  firmware: boolean;
+  serial: boolean;
+  autoPowerOff: boolean;
+  dongleLed: boolean;
+  speakerEq: boolean;
+  sidetone: boolean;
+  thx: boolean;
+  micCapture: boolean;
+};
+
+export type ModelDescriptor = {
+  id: string;
+  displayName: string;
+  vendorId: number;
+  wirelessPid: number | null;
+  wiredPid: number | null;
+  usagePage: number;
+  usage: number;
+  interfaceNumber: number;
+  eqBands: number[];
+  capabilities: ModelCapabilities;
+};
+
 export type DeviceSnapshot = {
   connected: boolean;
   link: Link;
+  model: ModelDescriptor;
   battery: Field<number>;
   charging: Field<boolean>;
   firmware: Field<string>;

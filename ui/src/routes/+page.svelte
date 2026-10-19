@@ -52,6 +52,7 @@
     deriveUiState({ status: device.status, thx: device.thx, loading: device.loading })
   );
   let pageLocked = $derived(!uiState.canWrite);
+  let modelName = $derived(device.status?.model.displayName ?? "耳机");
 </script>
 
 <div class="app-shell">
@@ -82,7 +83,7 @@
     </nav>
 
     <div class="side-device">
-      <div class="side-device-name"><span class="dot" class:on={device.status?.connected}></span> BlackShark V2 HS</div>
+      <div class="side-device-name"><span class="dot" class:on={device.status?.connected}></span> {modelName}</div>
       <div class="side-device-meta">
         {linkText()} · <span class="mono">{batteryText}</span> · {chargeText}
       </div>
@@ -98,7 +99,7 @@
           <strong>默认输出不是 Razer 耳机</strong>
           <span>
             当前：{device.status?.audioOutput.name ?? "未知设备"}。
-            请先在 Windows 声音设置里把 BlackShark 设为默认输出；THX 功能暂不可用，HID 设置仍可用。
+            请先在 Windows 声音设置里把 {modelName} 设为默认输出；THX 功能暂不可用，HID 设置仍可用。
           </span>
         </div>
       {/if}

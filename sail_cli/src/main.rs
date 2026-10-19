@@ -259,6 +259,10 @@ fn link_display(link: Link) -> &'static str {
 fn print_snapshot(snapshot: &DeviceSnapshot) {
     println!("connected: {}", snapshot.connected);
     println!("link: {}", link_display(snapshot.link));
+    println!(
+        "model: {} ({})",
+        snapshot.model.display_name, snapshot.model.id
+    );
     println!("battery: {}", field_display(&snapshot.battery));
     println!("charging: {}", field_display(&snapshot.charging));
     println!("firmware: {}", field_display(&snapshot.firmware));

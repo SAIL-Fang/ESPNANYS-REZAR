@@ -30,6 +30,29 @@ function status(overrides: Partial<DeviceSnapshot> = {}): DeviceSnapshot {
   return {
     connected: true,
     link: "wireless" as Link,
+    model: {
+      id: "razer.blackshark_v2_hyperspeed",
+      displayName: "BlackShark V2 HyperSpeed",
+      vendorId: 0x1532,
+      wirelessPid: 0x0565,
+      wiredPid: 0x056e,
+      usagePage: 0xff14,
+      usage: 1,
+      interfaceNumber: 3,
+      eqBands: [31, 63, 125, 250, 500, 1000, 2000, 4000, 8000, 16000],
+      capabilities: {
+        battery: true,
+        charging: true,
+        firmware: true,
+        serial: true,
+        autoPowerOff: true,
+        dongleLed: true,
+        speakerEq: true,
+        sidetone: true,
+        thx: true,
+        micCapture: true
+      }
+    },
     battery: field(94),
     charging: field(false),
     firmware: field("1.6.11.0"),

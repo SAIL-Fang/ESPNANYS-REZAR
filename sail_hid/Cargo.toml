@@ -9,3 +9,4 @@ description = "SAIL Windows HID transport for the Razer BlackShark V2 HyperSpeed
 [dependencies]
 sail_core = { path = "../sail_core" }
 hidapi = "2"
+serde = { version = "1", features = ["derive"] }
