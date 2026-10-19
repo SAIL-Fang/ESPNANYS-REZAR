@@ -3,10 +3,44 @@
 // Copyright (c) 2026 SAIL
 // SPDX-License-Identifier: MIT
 use sail_app::{DeviceSnapshot, EqPreset, SailApp, ThxSnapshot};
+use std::fs;
+use std::path::PathBuf;
 use std::process::Command as ProcessCommand;
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{Manager, WindowEvent};
+
+/// One-file green builds embed our own THX helper. Extract it before the first
+/// Tauri command so `sail_app::find_thx_helper` can use its normal
+/// %LOCALAPPDATA%\SAIL\bin path. This is still a separate helper process; it
+/// isolates a THX DLL access violation from the UI process.
+fn install_embedded_thx_helper() {
+    const EMBEDDED: &[u8] = include_bytes!(env!("SAIL_THX_EMBEDDED"));
+    if EMBEDDED.is_empty() {
+        return;
+    }
+    let Some(local) = std::env::var_os("LOCALAPPDATA") else {
+        return;
+    };
+    let path = PathBuf::from(local)
+        .join("SAIL")
+        .join("bin")
+        .join("sail_thx.exe");
+    if fs::read(&path)
+        .map(|existing| existing == EMBEDDED)
+        .unwrap_or(false)
+    {
+        return;
+    }
+    if let Some(parent) = path.parent() {
+        let _ = fs::create_dir_all(parent);
+    }
+    let temporary = path.with_extension("exe.tmp");
+    if fs::write(&temporary, EMBEDDED).is_ok() {
+        let _ = fs::remove_file(&path);
+        let _ = fs::rename(&temporary, &path);
+    }
+}
 
 fn app() -> SailApp {
     SailApp::new()
@@ -182,6 +216,7 @@ fn quit_app(app: tauri::AppHandle) {
 pub fn run() {
     tauri::Builder::default()
         .setup(|app| {
+            install_embedded_thx_helper();
             let show = MenuItem::with_id(app, "show", "显示窗口", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&show, &quit])?;

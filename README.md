@@ -244,6 +244,16 @@ ESPNANYS-REZAR-v0.1.0-green\
 如果 THX 还没安装，仍需要先使用完整版的 `install-sail.cmd` 或手动安装 THX。
 绿色包只是免安装 SAIL 本体，不是免装 THX。
 
+### 单文件绿色版
+
+`ESPNANYS-REZAR.exe` 是单文件发布包：UI 内嵌 `sail_thx.exe`，首次启动会把它
+解压到 `%LOCALAPPDATA%\SAIL\bin\sail_thx.exe`，之后正常调用。运行时 THX helper
+仍然是独立子进程（保留 DLL 崩溃隔离），所以任务管理器里会看到两个进程，但
+用户只需要一个 exe。
+
+单文件包不包含 `sail_cli.exe`；CLI 是诊断/自动化工具，保留在文件夹绿色版或
+`%LOCALAPPDATA%\SAIL\bin` 即可。
+
 ### 私有备份 THX APO（不要提交到仓库）
 
 ```powershell
