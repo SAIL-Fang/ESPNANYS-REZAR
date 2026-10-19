@@ -7,7 +7,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { device } from "$lib/device.svelte";
-  import { chargingText, fieldText } from "$lib/types";
+  import { derivePresentation } from "$lib/presentation";
   import {
     browserForeground,
     browserForegroundEvents,
@@ -38,28 +38,18 @@
 
   let sectionLabel = $derived(labels[tab]);
 
-  function linkText(): string {
-    switch (device.status?.link) {
-      case "wireless":
-        return "无线 2.4G";
-      case "wired":
-        return "有线 USB";
-      default:
-        return "未连接";
-    }
-  }
-
-  let batteryText = $derived(
-    device.status?.connected ? fieldText(device.status.battery, "%") : "—"
-  );
-  let chargeText = $derived(
-    device.status?.connected ? chargingText(device.status.charging) : "—"
-  );
   let uiState = $derived(
     deriveUiState({ status: device.status, thx: device.thx, loading: device.loading })
   );
+  let presentation = $derived(
+    derivePresentation({
+      status: device.status,
+      thx: device.thx,
+      uiState,
+      loading: device.loading
+    })
+  );
   let pageLocked = $derived(!uiState.canWrite);
-  let modelName = $derived(device.status?.model.displayName ?? "耳机");
 
   onMount(() => {
     const lifecycle = new ConnectionLifecycle({
@@ -106,9 +96,9 @@
     </nav>
 
     <div class="side-device">
-      <div class="side-device-name"><span class="dot" class:on={device.status?.connected}></span> {modelName}</div>
+      <div class="side-device-name"><span class="dot" class:on={device.status?.connected}></span> {presentation.modelName}</div>
       <div class="side-device-meta">
-        {linkText()} · <span class="mono">{batteryText}</span> · {chargeText}
+        {presentation.transportLabel} · <span class="mono">{presentation.batteryText}</span> · {presentation.chargeText}
       </div>
     </div>
   </aside>
@@ -119,11 +109,8 @@
     <div class="page-content" inert={pageLocked}>
       {#if uiState.outputBlocked}
         <div class="route-warning">
-          <strong>默认输出不是 Razer 耳机</strong>
-          <span>
-            当前：{device.status?.audioOutput.name ?? "未知设备"}。
-            请先在 Windows 声音设置里把 {modelName} 设为默认输出；THX 功能暂不可用，HID 设置仍可用。
-          </span>
+          <strong>{presentation.routeWarningTitle}</strong>
+          <span>{presentation.routeWarningDetail}</span>
         </div>
       {/if}
 

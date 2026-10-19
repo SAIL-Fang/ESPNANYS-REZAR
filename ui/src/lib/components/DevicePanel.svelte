@@ -6,22 +6,21 @@
 -->
 <script lang="ts">
   import { device } from "$lib/device.svelte";
-  import { chargingText, fieldText } from "$lib/types";
+  import { derivePresentation } from "$lib/presentation";
+  import { deriveUiState } from "$lib/ui-state";
+  import { fieldText } from "$lib/types";
 
-  function linkText(): string {
-    switch (device.status?.link) {
-      case "standby":
-        return "耳机未开机";
-      case "wireless":
-        return "无线 2.4G";
-      case "wired":
-        return "有线 USB";
-      case "unknown":
-        return "未知接口";
-      default:
-        return "未连接";
-    }
-  }
+  let uiState = $derived(
+    deriveUiState({ status: device.status, thx: device.thx, loading: device.loading })
+  );
+  let presentation = $derived(
+    derivePresentation({
+      status: device.status,
+      thx: device.thx,
+      uiState,
+      loading: device.loading
+    })
+  );
 </script>
 
 <div class="page-head">
@@ -30,7 +29,7 @@
     <p>连接、电量、固件和硬件开关。所有 HID 读取都由 SAIL 自己完成。</p>
   </div>
   <span class="badge" class:ok={device.status?.connected} class:warn={device.status?.link === "standby"}>
-    {device.status?.link === "standby" ? "待开机" : device.status?.connected ? "在线" : "离线"}
+    {presentation.stateBadge}
   </span>
 </div>
 
@@ -38,9 +37,9 @@
   <h2>状态</h2>
   {#if device.status}
     <dl class="kv">
-      <dt>连接</dt><dd>{linkText()}</dd>
-      <dt>电量</dt><dd>{fieldText(device.status.battery, "%")}</dd>
-      <dt>充电</dt><dd>{chargingText(device.status.charging)}</dd>
+      <dt>连接</dt><dd>{presentation.transportLabel}</dd>
+      <dt>电量</dt><dd>{presentation.batteryText}</dd>
+      <dt>充电</dt><dd>{presentation.chargeText}</dd>
       <dt>固件</dt><dd>{fieldText(device.status.firmware)}</dd>
       <dt>序列号</dt><dd>{fieldText(device.status.serial)}</dd>
       <dt>自动关机</dt><dd>{fieldText(device.status.autoPowerOffMin, " 分钟")}</dd>

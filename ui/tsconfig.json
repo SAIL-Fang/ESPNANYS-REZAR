@@ -15,6 +15,7 @@
   "exclude": [
     "src/lib/ui-state.test.ts",
     "src/lib/connection-lifecycle.test.ts",
+    "src/lib/presentation.test.ts",
     "../node_modules/**",
     "../src/service-worker.js",
     "../src/service-worker/**/*.js",

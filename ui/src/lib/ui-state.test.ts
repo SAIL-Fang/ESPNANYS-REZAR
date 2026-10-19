@@ -120,7 +120,6 @@ test("receiver present with powered-off headset is headset_off", () => {
   });
   assert.equal(state.kind, "headset_off");
   assert.equal(state.powerBlocked, true);
-  assert.equal(state.powerTitle, "耳机未开机");
   assert.equal(state.canWrite, false);
   assert.equal(state.thxReady, false);
 });

@@ -27,8 +27,6 @@ export interface UiState {
   canWrite: boolean;
   /** THX is installed, bound, and usable on the current output. */
   thxReady: boolean;
-  powerTitle: string;
-  powerDetail: string;
   wiredNotReady: boolean;
 }
 
@@ -70,17 +68,6 @@ export function shouldPollStatus({
   return visible && focused && !offline;
 }
 
-const POWER_COPY: Record<"standby" | "missing", { title: string; detail: string }> = {
-  standby: {
-    title: "耳机未开机",
-    detail: "接收器仍连接，但耳机本体没有响应。请打开耳机电源；应用会自动恢复。"
-  },
-  missing: {
-    title: "耳机未连接",
-    detail: "没有检测到耳机或接收器。请检查连接后再试。"
-  }
-};
-
 export function deriveUiState({ status, thx, loading }: UiStateInput): UiState {
   if (!status) {
     return {
@@ -89,8 +76,6 @@ export function deriveUiState({ status, thx, loading }: UiStateInput): UiState {
       outputBlocked: false,
       canWrite: false,
       thxReady: false,
-      powerTitle: loading ? "正在检测设备" : POWER_COPY.missing.title,
-      powerDetail: loading ? "请稍候。" : POWER_COPY.missing.detail,
       wiredNotReady: false
     };
   }
@@ -101,15 +86,12 @@ export function deriveUiState({ status, thx, loading }: UiStateInput): UiState {
 
   if (!status.connected) {
     const standby = status.link === "standby";
-    const copy = standby ? POWER_COPY.standby : POWER_COPY.missing;
     return {
       kind: standby ? "headset_off" : "no_receiver",
       powerBlocked: true,
       outputBlocked: false,
       canWrite: false,
       thxReady: false,
-      powerTitle: copy.title,
-      powerDetail: copy.detail,
       wiredNotReady
     };
   }
@@ -121,8 +103,6 @@ export function deriveUiState({ status, thx, loading }: UiStateInput): UiState {
       outputBlocked: true,
       canWrite: false,
       thxReady: false,
-      powerTitle: "",
-      powerDetail: "",
       wiredNotReady
     };
   }
@@ -135,8 +115,6 @@ export function deriveUiState({ status, thx, loading }: UiStateInput): UiState {
       outputBlocked: false,
       canWrite: true,
       thxReady: false,
-      powerTitle: "",
-      powerDetail: "",
       wiredNotReady
     };
   }
@@ -147,8 +125,6 @@ export function deriveUiState({ status, thx, loading }: UiStateInput): UiState {
     outputBlocked: false,
     canWrite: true,
     thxReady: true,
-    powerTitle: "",
-    powerDetail: "",
     wiredNotReady
   };
 }

@@ -6,18 +6,25 @@
 -->
 <script lang="ts">
   import { device } from "$lib/device.svelte";
+  import { derivePresentation } from "$lib/presentation";
   import { deriveUiState } from "$lib/ui-state";
 
   let uiState = $derived(
     deriveUiState({ status: device.status, thx: device.thx, loading: device.loading })
   );
+  let presentation = $derived(
+    derivePresentation({
+      status: device.status,
+      thx: device.thx,
+      uiState,
+      loading: device.loading
+    })
+  );
   let blocked = $derived(uiState.powerBlocked);
   let standby = $derived(uiState.kind === "headset_off");
-  let title = $derived(uiState.powerTitle);
-  let detail = $derived(uiState.powerDetail);
-  let waitText = $derived(
-    standby ? "正在等待耳机开机…" : "正在等待接收器连接…"
-  );
+  let title = $derived(presentation.powerTitle);
+  let detail = $derived(presentation.powerDetail);
+  let waitText = $derived(presentation.powerWaitText);
 
   async function quit() {
     await device.quit();

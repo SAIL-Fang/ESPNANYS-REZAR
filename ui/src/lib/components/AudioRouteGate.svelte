@@ -6,16 +6,24 @@
 -->
 <script lang="ts">
   import { device } from "$lib/device.svelte";
+  import { derivePresentation } from "$lib/presentation";
   import { deriveUiState } from "$lib/ui-state";
 
   let busy = $state(false);
   let error = $state("");
 
   let endpoints = $derived(device.status?.audioOutput?.endpoints ?? []);
-  let current = $derived(device.status?.audioOutput?.name ?? "未知设备");
   let target = $derived(endpoints.find((endpoint) => endpoint.isHeadset) ?? null);
   let uiState = $derived(
     deriveUiState({ status: device.status, thx: device.thx, loading: device.loading })
+  );
+  let presentation = $derived(
+    derivePresentation({
+      status: device.status,
+      thx: device.thx,
+      uiState,
+      loading: device.loading
+    })
   );
   let blocked = $derived(uiState.outputBlocked);
 
@@ -50,27 +58,18 @@
 
       <div class="route-gate-heading">
         <span class="eyebrow">音频输出</span>
-        <h2 id="route-gate-title">先切换到 Razer 耳机</h2>
+        <h2 id="route-gate-title">{presentation.routeTitle}</h2>
       </div>
-      <p id="route-gate-desc">
-        THX 空间音效和声音标准化只对耳机输出生效。当前 Windows 正在使用其他设备，
-        切换后才能继续。
-      </p>
+      <p id="route-gate-desc">{presentation.routeDetail}</p>
 
       <div class="route-gate-devices">
         <div class="route-gate-device">
           <span class="route-gate-device-label">当前输出</span>
-          <span class="route-gate-device-name">{current}</span>
+          <span class="route-gate-device-name">{presentation.routeCurrentLabel}</span>
         </div>
         <div class="route-gate-device">
           <span class="route-gate-device-label">目标输出</span>
-          <span class="route-gate-device-name">
-            {#if target}
-              {target.name}
-            {:else}
-              未找到 Razer 耳机输出，请检查连接
-            {/if}
-          </span>
+          <span class="route-gate-device-name">{presentation.routeTargetLabel}</span>
         </div>
       </div>
 
