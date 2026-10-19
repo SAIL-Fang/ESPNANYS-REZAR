@@ -66,6 +66,21 @@ where
         .map_err(|error| format!("background task failed: {error}"))?
 }
 
+/// Writes are rejected even if a queued click raced the last status refresh.
+async fn blocking_write<T, F>(work: F) -> Result<T, String>
+where
+    T: Send + 'static,
+    F: FnOnce() -> Result<T, String> + Send + 'static,
+{
+    blocking(move || {
+        app()
+            .require_online()
+            .map_err(|error| error.to_string())?;
+        work()
+    })
+    .await
+}
+
 #[tauri::command]
 async fn get_status() -> Result<DeviceSnapshot, String> {
     blocking(|| Ok(app().snapshot())).await
@@ -78,7 +93,7 @@ fn get_eq_presets() -> Vec<EqPreset> {
 
 #[tauri::command]
 async fn set_sidetone(enabled: bool) -> Result<(), String> {
-    blocking(move || {
+    blocking_write(move || {
         app()
             .set_sidetone(enabled)
             .map_err(|error| error.to_string())
@@ -88,7 +103,7 @@ async fn set_sidetone(enabled: bool) -> Result<(), String> {
 
 #[tauri::command]
 async fn set_sidetone_volume(value: u8) -> Result<(), String> {
-    blocking(move || {
+    blocking_write(move || {
         app()
             .set_sidetone_volume(value)
             .map_err(|error| error.to_string())
@@ -105,7 +120,7 @@ async fn mic_command(args: Vec<String>) -> Result<(), String> {
     {
         return Err("mic_command only accepts mic-* commands".into());
     }
-    blocking(move || {
+    blocking_write(move || {
         app()
             .mic_command(&args)
             .map_err(|error| error.to_string())
@@ -115,7 +130,7 @@ async fn mic_command(args: Vec<String>) -> Result<(), String> {
 
 #[tauri::command]
 async fn start_mic_preview() -> Result<(), String> {
-    blocking(|| {
+    blocking_write(|| {
         app()
             .start_mic_preview()
             .map_err(|error| error.to_string())
@@ -125,7 +140,7 @@ async fn start_mic_preview() -> Result<(), String> {
 
 #[tauri::command]
 async fn set_eq_preset(preset: String) -> Result<(), String> {
-    blocking(move || {
+    blocking_write(move || {
         app()
             .set_eq_preset(&preset)
             .map_err(|error| error.to_string())
@@ -140,7 +155,7 @@ async fn set_eq_gains(gains: Vec<i8>) -> Result<(), String> {
     }
     let mut array = [0i8; 10];
     array.copy_from_slice(&gains);
-    blocking(move || {
+    blocking_write(move || {
         app()
             .set_eq_gains(array)
             .map_err(|error| error.to_string())
@@ -155,7 +170,7 @@ async fn get_thx_status() -> Result<ThxSnapshot, String> {
 
 #[tauri::command]
 async fn set_normalization(level: i32) -> Result<(), String> {
-    blocking(move || {
+    blocking_write(move || {
         app()
             .set_thx_level(level)
             .map_err(|error| error.to_string())
@@ -165,7 +180,7 @@ async fn set_normalization(level: i32) -> Result<(), String> {
 
 #[tauri::command]
 async fn set_normalization_enabled(enabled: bool) -> Result<(), String> {
-    blocking(move || {
+    blocking_write(move || {
         app()
             .set_thx_enabled(enabled)
             .map_err(|error| error.to_string())
@@ -175,7 +190,7 @@ async fn set_normalization_enabled(enabled: bool) -> Result<(), String> {
 
 #[tauri::command]
 async fn set_spatial(enabled: bool) -> Result<(), String> {
-    blocking(move || {
+    blocking_write(move || {
         app()
             .set_thx_spatial(enabled)
             .map_err(|error| error.to_string())
@@ -185,7 +200,7 @@ async fn set_spatial(enabled: bool) -> Result<(), String> {
 
 #[tauri::command]
 async fn verify_thx() -> Result<String, String> {
-    blocking(|| app().verify_thx().map_err(|error| error.to_string())).await
+    blocking_write(|| app().verify_thx().map_err(|error| error.to_string())).await
 }
 
 #[tauri::command]

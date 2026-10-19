@@ -14,7 +14,9 @@
   let current = $derived(device.status?.audioOutput?.name ?? "未知设备");
   let target = $derived(endpoints.find((endpoint) => endpoint.isHeadset) ?? null);
   let blocked = $derived(
-    !!device.status?.audioOutput && device.status.audioOutput.isHeadset === false
+    !!device.status?.audioOutput &&
+      device.status.audioOutput.isHeadset === false &&
+      device.status.connected !== false
   );
 
   async function apply() {

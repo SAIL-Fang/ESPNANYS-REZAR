@@ -535,7 +535,8 @@ sail_cli mic-sidetone on|off
 
 ## 已知问题 / 未完成
 
-- 无线状态不是“看到接收器就算在线”：`sail_app` 会用耳机侧的 battery/charging 命令做一次握手。接收器插着但耳机没开机时，battery/charging 都会 timeout，状态显示为 `standby`（UI：**耳机未开机**，红点 + 请开机），而不是伪造的“无线已连接”。
+- 无线状态不是“看到接收器就算在线”：`sail_app` 会用耳机侧的 battery/charging 命令做一次握手。接收器插着但耳机没开机时，状态显示为 `standby`（UI：**耳机未开机**，红点 + 请开机），而不是伪造的“无线已连接”。
+- 耳机未开机/未连接时，设置页整体进入 `inert` 锁定：EQ、声音标准化、THX、侧音、麦克风写入都被阻止；Tauri 写命令还会再跑一次 HID 在线检查。默认 EQ 只会在耳机在线时写入，关机启动不会写。
 - 有线 `0x056E` 主动读取已修正：get 请求 offset 9 = `0x00`，set 请求 = `0x80`。响应里的 `0x80` 不能照抄到请求。事件缓存只作 timeout 兜底。
 - `0x96 Set Mic Preset EQ Index` 在 0x0565 无线接收器上返回 **status 5（not supported）**；可能有线 0x056E 才支持。
 - 侧音音量 `0x99` 的 UI 0–100 → 设备值映射尚未完全确定（当前按 0–15 线性换算；UI 50 → 设备 7）。

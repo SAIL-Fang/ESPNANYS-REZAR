@@ -563,6 +563,31 @@ impl SailApp {
         }
     }
 
+    /// Cheap write gate. The receiver can be open while the headset is off;
+    /// never let a queued UI write touch EQ/sidetone/THX in that state.
+    pub fn headset_online(&self) -> bool {
+        let _guard = hid_lock();
+        let Ok(transport) = HidTransport::open(None) else {
+            return false;
+        };
+        let wired = transport.info().product_id == PID_WIRED;
+        let mut device = SailDevice::new(transport).with_timeout(Duration::from_millis(600));
+        if wired {
+            return true;
+        }
+        device.get(Command::Battery).is_ok() || device.get(Command::Charging).is_ok()
+    }
+
+    pub fn require_online(&self) -> Result<(), SailError> {
+        if self.headset_online() {
+            Ok(())
+        } else {
+            Err(SailError::Invalid(
+                "耳机未开机，设置已锁定；请先打开耳机电源".into(),
+            ))
+        }
+    }
+
     pub fn set_default_audio_output(&self, device_id: Option<&str>) -> Result<(), String> {
         // An empty selector means "pick the first Razer headset endpoint".
         audio_route::set_default(device_id.unwrap_or(""))
