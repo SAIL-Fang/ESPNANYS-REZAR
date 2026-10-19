@@ -223,6 +223,27 @@ scripts\run-ui.cmd
 > 所以 `sail_thx.exe` 和 `sail_ui.exe` 都要 staging 到 `%LOCALAPPDATA%\SAIL\bin` 再运行；
 > 生产安装到 `C:\Program Files\SAIL` 同样没问题。
 
+### 绿色免安装版
+
+绿色包不需要安装、不需要管理员权限、不写 Program Files：
+
+```text
+ESPNANYS-REZAR-v0.1.0-green\
+├─ sail_ui.exe
+├─ sail_thx.exe
+├─ sail_cli.exe
+└─ README.txt
+```
+
+直接双击 `sail_ui.exe` 即可运行。`sail_ui.exe` 会优先使用**同目录**的
+`sail_thx.exe`，所以三个文件必须放在一起。前提是：
+
+- Windows x64 + WebView2 Runtime
+- 本机已经安装 Razer THX APO；绿色包不包含任何 Razer/THX 二进制
+
+如果 THX 还没安装，仍需要先使用完整版的 `install-sail.cmd` 或手动安装 THX。
+绿色包只是免安装 SAIL 本体，不是免装 THX。
+
 ### 私有备份 THX APO（不要提交到仓库）
 
 ```powershell

@@ -406,6 +406,21 @@ fn find_thx_helper() -> Option<PathBuf> {
             return Some(path);
         }
     }
+    // Green build: sail_ui.exe, sail_thx.exe and sail_cli.exe live in the
+    // same folder. Prefer the sibling helper so the folder can run without
+    // install-sail.cmd or a machine-wide copy under %LOCALAPPDATA%.
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            for candidate in [
+                dir.join("sail_thx.exe"),
+                dir.join("payload").join("sail_thx.exe"),
+            ] {
+                if candidate.is_file() {
+                    return Some(candidate);
+                }
+            }
+        }
+    }
     let local = std::env::var_os("LOCALAPPDATA").map(PathBuf::from)?;
     let path = local.join("SAIL").join("bin").join("sail_thx.exe");
     path.is_file().then_some(path)
