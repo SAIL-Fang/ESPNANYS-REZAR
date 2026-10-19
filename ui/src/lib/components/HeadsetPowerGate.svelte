@@ -5,10 +5,10 @@
   SPDX-License-Identifier: MIT
 -->
 <script lang="ts">
+  import { onMount } from "svelte";
   import { device } from "$lib/device.svelte";
 
-  let busy = $state(false);
-  let error = $state("");
+  let checking = $state(false);
 
   let blocked = $derived(!!device.status && device.status.connected === false);
   let standby = $derived(device.status?.link === "standby");
@@ -19,18 +19,40 @@
       : "没有检测到耳机或接收器。请检查连接后再试。"
   );
 
-  async function refresh() {
-    if (busy) return;
-    busy = true;
-    error = "";
+  async function autoReconnect() {
+    if (!blocked) return;
+    // Never poll HID while the app is hidden, minimized, in the tray, or not
+    // the foreground window. This is a UI-driven reconnect, not a background
+    // service.
+    if (document.hidden || !document.hasFocus()) return;
+    if (checking || device.busy || device.loading) return;
+    checking = true;
     try {
-      await device.refresh();
-    } catch (cause) {
-      error = cause instanceof Error ? cause.message : String(cause);
+      await device.refresh(true, false);
+      if (device.status?.connected) {
+        // HID is back; fetch THX once so the unlocked page is not stale.
+        await device.refresh(true, true);
+      }
     } finally {
-      busy = false;
+      checking = false;
     }
   }
+
+  onMount(() => {
+    const timer = setInterval(() => {
+      void autoReconnect();
+    }, 5000);
+    const onFocus = () => {
+      void autoReconnect();
+    };
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onFocus);
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onFocus);
+    };
+  });
 
   async function quit() {
     await device.quit();
@@ -66,18 +88,16 @@
         <strong>已锁定</strong>
       </div>
 
-      {#if error}<p class="route-gate-error">{error}</p>{/if}
-
-      <div class="route-gate-actions">
-        <button class="btn primary" type="button" onclick={refresh} disabled={busy || device.busy}>
-          {busy ? "检测中…" : "重新检测"}
-        </button>
-        <div class="route-gate-secondary">
-          <button class="btn ghost" type="button" onclick={quit}>退出</button>
-        </div>
+      <div class="power-gate-wait" role="status">
+        <span class="power-gate-pulse" aria-hidden="true"></span>
+        正在等待耳机开机…
       </div>
 
-      <p class="route-gate-note">耳机开机后会自动解锁；不会写入默认 EQ 或其他设置。</p>
+      <div class="route-gate-actions">
+        <button class="btn ghost" type="button" onclick={quit}>退出</button>
+      </div>
+
+      <p class="route-gate-note">打开耳机电源后会自动恢复，不需要手动刷新；不会写入默认 EQ 或其他设置。</p>
     </div>
   </div>
 {/if}
