@@ -47,7 +47,7 @@
   let uiState = $derived(
     deriveUiState({ status: device.status, thx: device.thx, loading: device.loading })
   );
-  let powerBlocked = $derived(uiState.powerBlocked);
+  let pageLocked = $derived(!uiState.canWrite);
 </script>
 
 <div class="app-shell">
@@ -88,7 +88,7 @@
   <main class="main-surface">
     <StatusStrip label={sectionLabel} />
 
-    <div class="page-content" inert={powerBlocked}>
+    <div class="page-content" inert={pageLocked}>
       {#if uiState.outputBlocked}
         <div class="route-warning">
           <strong>默认输出不是 Razer 耳机</strong>
