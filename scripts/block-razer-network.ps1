@@ -5,16 +5,12 @@
 #requires -Version 5.1
 <#
 .SYNOPSIS
-    找到本机 Razer 软件，并按可执行文件创建 Windows 防火墙阻断规则。
+    找到本机 Razer 网络客户端，并按可执行文件创建 Windows 防火墙阻断规则。
 
 .DESCRIPTION
     这个脚本做的是“禁止 Razer 软件联网”，不是关闭 Windows 防火墙。
-    它会从以下位置自动发现 Razer 可执行文件：
-      - 正在运行的 Razer 进程
-      - 路径中含 Razer 的 Windows 服务
-      - Program Files / Program Files (x86) / ProgramData / LocalAppData / AppData 下的 Razer 目录
-      - 卸载注册表中的 Razer / Synapse 条目
-
+    默认只处理 RazerAppEngine.exe（Synapse 的网络客户端），避免误伤安装器、
+    卸载器、驱动安装程序和本地服务；
     规则只属于本脚本的组 "SAIL Razer Network Block"，不会修改其它防火墙规则，
     也不会改动 hosts、服务、计划任务或 Razer 文件。
 
@@ -36,6 +32,10 @@
 .PARAMETER ExtraPath
     额外加入的 .exe 路径；用于自动发现漏掉的 Razer 组件。
 
+.PARAMETER All
+    扩展到所有 Razer 可执行文件（安装器、卸载器、服务、工具）。
+    默认只阻断 RazerAppEngine.exe；不要和默认模式混用。
+
 .EXAMPLE
     powershell -ExecutionPolicy Bypass -File scripts\block-razer-network.ps1 -List
 
@@ -51,6 +51,7 @@ param(
     [switch]$Apply,
     [switch]$Remove,
     [switch]$NoElevate,
+    [switch]$All,
     [string[]]$ExtraPath = @()
 )
 
@@ -58,6 +59,8 @@ $ErrorActionPreference = 'Stop'
 
 $script:Group = 'SAIL Razer Network Block'
 $script:RulePrefix = 'SAIL Razer block'
+$script:All = [bool]$All
+$script:NetworkClient = 'RazerAppEngine.exe'
 
 function Test-Admin {
     $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
@@ -106,6 +109,12 @@ function Get-RazerExecutables {
 
         # Do not accidentally block our own app if it lives under a Razer-like path.
         if ($full -match '(?i)ESPNANYS-REZAR|\\sail_[^\\]+\.exe$') { return }
+
+        # Default mode: one network client application. RazerAppEngine spawns
+        # its renderer/utility children from the same executable path.
+        if (-not $script:All -and [IO.Path]::GetFileName($full) -ne $script:NetworkClient) {
+            return
+        }
 
         $found.Add($full) | Out-Null
     }
@@ -230,7 +239,7 @@ function Install-SailRules([string[]]$Executables) {
 }
 
 function Show-RazerList([string[]]$Executables) {
-    Write-Title 'Razer 可执行文件'
+    Write-Title 'Razer 网络客户端'
     if ($Executables.Count -eq 0) {
         Write-Warn '没有发现 Razer 可执行文件。'
     } else {
@@ -267,6 +276,7 @@ if ($needsAdmin -and -not (Test-Admin)) {
     $arguments = "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`" -NoElevate"
     if ($Apply) { $arguments += ' -Apply' }
     if ($Remove) { $arguments += ' -Remove' }
+    if ($All) { $arguments += ' -All' }
 
     Write-Warn '需要管理员权限，正在请求提权...'
     $process = Start-Process -FilePath (Get-Command powershell.exe).Source `
@@ -296,6 +306,11 @@ if ($Apply) {
 
 # Default: safe preview. No system changes.
 Write-Title 'Razer 网络隔离预览（未修改系统）'
+if (-not $script:All) {
+    Write-Info '模式：仅 RazerAppEngine.exe（Synapse 网络客户端）；全部 Razer 组件请用 -All。'
+} else {
+    Write-Info '模式：全部 Razer 可执行文件（-All）。'
+}
 if ($executables.Count -eq 0) {
     Write-Warn '没有发现 Razer 可执行文件。'
 } else {
