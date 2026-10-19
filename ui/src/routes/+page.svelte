@@ -14,6 +14,7 @@
   import MicPanel from "$lib/components/MicPanel.svelte";
   import SettingsPanel from "$lib/components/SettingsPanel.svelte";
   import AudioRouteGate from "$lib/components/AudioRouteGate.svelte";
+  import HeadsetPowerGate from "$lib/components/HeadsetPowerGate.svelte";
 
   type Tab = "device" | "sound" | "demo" | "mic" | "settings";
 
@@ -43,14 +44,6 @@
   let batteryText = $derived(fieldText(device.status?.battery, "%"));
   let chargeText = $derived(chargingText(device.status?.charging));
   let powerBlocked = $derived(!!device.status && device.status.connected === false);
-  let powerTitle = $derived(
-    device.status?.link === "standby" ? "耳机未开机" : "耳机未连接"
-  );
-  let powerDetail = $derived(
-    device.status?.link === "standby"
-      ? "接收器仍连接，但耳机本体没有响应。请打开耳机电源；设置已锁定，打开后会自动恢复。"
-      : "没有检测到耳机或接收器。请检查连接；设置已锁定，连接后会自动恢复。"
-  );
 </script>
 
 <div class="app-shell">
@@ -91,25 +84,7 @@
   <main class="main-surface">
     <StatusStrip label={sectionLabel} />
 
-    {#if powerBlocked}
-      <div class="power-lock" role="alert">
-        <span class="power-lock-icon" aria-hidden="true">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round">
-            <path d="M12 3v8" />
-            <path d="M7.5 6.6a7.5 7.5 0 1 0 9 0" />
-          </svg>
-        </span>
-        <div class="power-lock-body">
-          <strong>{powerTitle}</strong>
-          <span>{powerDetail}</span>
-        </div>
-        <button class="btn" type="button" onclick={() => device.refresh()} disabled={device.loading || device.busy}>
-          {device.loading ? "检测中…" : "重新检测"}
-        </button>
-      </div>
-    {/if}
-
-    <div class="page-content" class:power-locked={powerBlocked} inert={powerBlocked}>
+    <div class="page-content" inert={powerBlocked}>
       {#if device.status?.audioOutput && device.status.audioOutput.isHeadset === false}
         <div class="route-warning">
           <strong>默认输出不是 Razer 耳机</strong>
@@ -140,3 +115,4 @@
 </div>
 
 <AudioRouteGate />
+<HeadsetPowerGate />
