@@ -32,6 +32,9 @@
 
   let battery = $derived(known(device.status?.battery, 0));
   let batteryOn = $derived(Math.max(0, Math.min(5, Math.round(battery / 20))));
+  let batteryText = $derived(
+    device.status?.connected ? fieldText(device.status.battery, "%") : "—"
+  );
   let audioOk = $derived(device.status?.audioOutput?.isHeadset !== false);
   let uiState = $derived(
     deriveUiState({ status: device.status, thx: device.thx, loading: device.loading })
@@ -82,7 +85,7 @@
         <span class:on={i < batteryOn}></span>
       {/each}
     </div>
-    <strong class="mono">{fieldText(device.status?.battery, "%")}</strong>
+    <strong class="mono">{batteryText}</strong>
   </div>
   <div class="status-item">
     <span class="dot" class:on={thxReady} class:warn={thxInstalled && !thxReady}></span>

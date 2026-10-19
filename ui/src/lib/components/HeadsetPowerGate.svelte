@@ -18,6 +18,9 @@
   let standby = $derived(uiState.kind === "headset_off");
   let title = $derived(uiState.powerTitle);
   let detail = $derived(uiState.powerDetail);
+  let waitText = $derived(
+    standby ? "正在等待耳机开机…" : "正在等待接收器连接…"
+  );
 
   async function autoReconnect() {
     const allowed = shouldAutoReconnect({
@@ -91,7 +94,7 @@
 
       <div class="power-gate-wait" role="status">
         <span class="power-gate-pulse" aria-hidden="true"></span>
-        正在等待耳机开机…
+        {waitText}
       </div>
 
       <div class="route-gate-actions">

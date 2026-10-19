@@ -42,8 +42,12 @@
     }
   }
 
-  let batteryText = $derived(fieldText(device.status?.battery, "%"));
-  let chargeText = $derived(chargingText(device.status?.charging));
+  let batteryText = $derived(
+    device.status?.connected ? fieldText(device.status.battery, "%") : "—"
+  );
+  let chargeText = $derived(
+    device.status?.connected ? chargingText(device.status.charging) : "—"
+  );
   let uiState = $derived(
     deriveUiState({ status: device.status, thx: device.thx, loading: device.loading })
   );
