@@ -206,5 +206,6 @@ Seam：
 - `StatusStrip`：THX 徽标由 `UiState.thxReady` 推导，不再单看 `installed && audioOk`。
 - 已实测输出矩阵：音响 → `output_wrong` 阻断窗 → 点「设为默认输出」→ 耳机 → `ready`，THX 徽标同步恢复。
 - 已实测 `headset_off`：全屏遮罩、只有「退出」、显示「正在等待耳机开机…」、设置控件不可用，且没有默认 EQ 写入。
+- 已实测后端写保护：关机状态下直接调用 `set_eq_preset` / `set_normalization` 均返回「耳机未开机，设置已锁定」。
 - 后端写命令：已统一 `require_online`。
 - 尚待真实硬件验证：开机自动解锁、拔接收器、失焦后台不轮询；debug 稳定前不发布。
