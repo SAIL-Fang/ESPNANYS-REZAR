@@ -41,6 +41,7 @@ function status(overrides: Partial<DeviceSnapshot> = {}): DeviceSnapshot {
       usage: 1,
       interfaceNumber: 3,
       eqBands: [31, 63, 125, 250, 500, 1000, 2000, 4000, 8000, 16000],
+      sidetoneMax: 15,
       capabilities: {
         battery: true,
         charging: true,
