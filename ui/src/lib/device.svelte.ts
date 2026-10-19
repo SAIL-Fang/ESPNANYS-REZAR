@@ -10,6 +10,14 @@ import type { DeviceSnapshot, EqPreset, ThxSnapshot } from "./types";
 
 const NORMALIZATION_KEY = "sail.normalizationLevel";
 
+// Debug-only probe: lets the focus/foreground test prove that no HID refresh
+// is attempted while the app is unfocused. Vite folds this out of release.
+function countRefreshAttempt() {
+  if (import.meta.env.VITE_SAIL_DEBUG !== "1") return;
+  const debugWindow = window as Window & { __sailRefreshCount?: number };
+  debugWindow.__sailRefreshCount = (debugWindow.__sailRefreshCount ?? 0) + 1;
+}
+
 function storedNormalizationLevel(): number {
   try {
     const raw = localStorage.getItem(NORMALIZATION_KEY);
@@ -86,6 +94,7 @@ export class DeviceStore {
   }
 
   async refresh(silent = false, includeThx = true) {
+    countRefreshAttempt();
     // A write owns the device; do not overlap it with a 10-second poll.
     if (this.busy) return;
     const epoch = ++this.refreshEpoch;
