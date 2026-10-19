@@ -5,36 +5,15 @@
   SPDX-License-Identifier: MIT
 -->
 <script lang="ts">
-  import { onMount } from "svelte";
   import { device } from "$lib/device.svelte";
   import { fieldText, known } from "$lib/types";
-  import { deriveUiState, shouldPollStatus } from "$lib/ui-state";
+  import { deriveUiState } from "$lib/ui-state";
 
   interface Props {
     label?: string;
   }
 
   let { label = "声音" }: Props = $props();
-
-  onMount(() => {
-    if (!device.status && !device.thx) device.refresh();
-    // Do not spawn the THX helper every 10 seconds: its DLL binding calls
-    // SetDefaultRenderDevice and can briefly interrupt playback. THX state is
-    // refreshed on startup, explicit refresh, and after THX writes.
-    const timer = setInterval(() => {
-      if (
-        !shouldPollStatus({
-          visible: !document.hidden,
-          focused: document.hasFocus(),
-          offline: !!device.status && !device.status.connected
-        })
-      ) {
-        return;
-      }
-      void device.refresh(true, false);
-    }, 10_000);
-    return () => clearInterval(timer);
-  });
 
   let battery = $derived(known(device.status?.battery, 0));
   let batteryOn = $derived(Math.max(0, Math.min(5, Math.round(battery / 20))));

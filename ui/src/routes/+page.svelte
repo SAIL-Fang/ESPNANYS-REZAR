@@ -5,8 +5,15 @@
   SPDX-License-Identifier: MIT
 -->
 <script lang="ts">
+  import { onMount } from "svelte";
   import { device } from "$lib/device.svelte";
   import { chargingText, fieldText } from "$lib/types";
+  import {
+    browserForeground,
+    browserForegroundEvents,
+    browserScheduler,
+    ConnectionLifecycle
+  } from "$lib/connection-lifecycle";
   import StatusStrip from "$lib/components/StatusStrip.svelte";
   import DevicePanel from "$lib/components/DevicePanel.svelte";
   import SoundPanel from "$lib/components/SoundPanel.svelte";
@@ -53,6 +60,22 @@
   );
   let pageLocked = $derived(!uiState.canWrite);
   let modelName = $derived(device.status?.model.displayName ?? "耳机");
+
+  onMount(() => {
+    const lifecycle = new ConnectionLifecycle({
+      scheduler: browserScheduler,
+      foreground: browserForeground,
+      events: browserForegroundEvents,
+      ports: {
+        hasSnapshot: () => !!device.status || !!device.thx,
+        isOffline: () => !device.status || !device.status.connected,
+        busy: () => device.busy,
+        refresh: (silent, includeThx) => device.refresh(silent, includeThx)
+      }
+    });
+    lifecycle.start();
+    return () => lifecycle.stop();
+  });
 </script>
 
 <div class="app-shell">

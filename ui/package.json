@@ -11,6 +11,8 @@
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
     "check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
     "test:state": "node --experimental-strip-types --test src/lib/ui-state.test.ts",
+    "test:lifecycle": "node --experimental-strip-types --test src/lib/connection-lifecycle.test.ts",
+    "test:ui": "npm run test:state && npm run test:lifecycle",
     "tauri": "tauri"
   },
   "license": "MIT",

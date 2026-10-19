@@ -5,11 +5,8 @@
   SPDX-License-Identifier: MIT
 -->
 <script lang="ts">
-  import { onMount } from "svelte";
   import { device } from "$lib/device.svelte";
-  import { deriveUiState, shouldAutoReconnect } from "$lib/ui-state";
-
-  let checking = $state(false);
+  import { deriveUiState } from "$lib/ui-state";
 
   let uiState = $derived(
     deriveUiState({ status: device.status, thx: device.thx, loading: device.loading })
@@ -21,42 +18,6 @@
   let waitText = $derived(
     standby ? "正在等待耳机开机…" : "正在等待接收器连接…"
   );
-
-  async function autoReconnect() {
-    const allowed = shouldAutoReconnect({
-      blocked,
-      visible: !document.hidden,
-      focused: document.hasFocus(),
-      busy: checking || device.busy || device.loading
-    });
-    if (!allowed) return;
-    checking = true;
-    try {
-      await device.refresh(true, false);
-      if (device.status?.connected) {
-        // HID is back; fetch THX once so the unlocked page is not stale.
-        await device.refresh(true, true);
-      }
-    } finally {
-      checking = false;
-    }
-  }
-
-  onMount(() => {
-    const timer = setInterval(() => {
-      void autoReconnect();
-    }, 5000);
-    const onFocus = () => {
-      void autoReconnect();
-    };
-    window.addEventListener("focus", onFocus);
-    document.addEventListener("visibilitychange", onFocus);
-    return () => {
-      clearInterval(timer);
-      window.removeEventListener("focus", onFocus);
-      document.removeEventListener("visibilitychange", onFocus);
-    };
-  });
 
   async function quit() {
     await device.quit();
