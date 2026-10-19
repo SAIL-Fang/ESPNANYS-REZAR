@@ -42,6 +42,7 @@ export type ModelDescriptor = {
   usage: number;
   interfaceNumber: number;
   eqBands: number[];
+  sidetoneMax: number | null;
   capabilities: ModelCapabilities;
 };
 

@@ -7,7 +7,7 @@
 <script lang="ts">
   import { device } from "$lib/device.svelte";
   import { chargingText, fieldText, known } from "$lib/types";
-  import { DEFAULT_EQ_GAINS, DEFAULT_NORMALIZATION_LEVEL, frequencies } from "$lib/presets";
+  import { DEFAULT_EQ_GAINS, DEFAULT_NORMALIZATION_LEVEL, formatEqBands } from "$lib/presets";
   import EqEditor from "$lib/components/EqEditor.svelte";
   import NormalizationPanel from "$lib/components/NormalizationPanel.svelte";
   import SpatialModeToggle from "$lib/components/SpatialModeToggle.svelte";
@@ -24,9 +24,12 @@
   let synced = $state(false);
 
   let available = $derived(
-    !!device.thx?.installed && device.status?.audioOutput?.isHeadset !== false
+    !!device.thx?.installed &&
+      device.status?.audioOutput?.isHeadset !== false &&
+      device.status?.model.capabilities.thx !== false
   );
   let thxInstalled = $derived(!!device.thx?.installed);
+  let modelFrequencies = $derived(formatEqBands(device.status?.model.eqBands));
   let spatial = $derived(device.thx?.spatialEnabled ?? null);
   let spatialBusy = $derived(device.busy || !available || spatial === null);
   let battery = $derived(known(device.status?.battery, 0));
@@ -164,7 +167,7 @@
   {#if gains.length === 10}
     <EqEditor
       {gains}
-      {frequencies}
+      frequencies={modelFrequencies}
       busy={device.busy || savingEq}
       oninput={updateGain}
       onreset={resetGains}

@@ -35,6 +35,7 @@ pub struct ModelDescriptor {
     pub usage: u16,
     pub interface_number: i32,
     pub eq_bands: &'static [u16],
+    pub sidetone_max: Option<u8>,
     pub capabilities: ModelCapabilities,
 }
 
@@ -48,6 +49,7 @@ pub static RAZER_BLACKSHARK_V2_HYPERSPEED: ModelDescriptor = ModelDescriptor {
     usage: VENDOR_USAGE,
     interface_number: 3,
     eq_bands: &[31, 63, 125, 250, 500, 1_000, 2_000, 4_000, 8_000, 16_000],
+    sidetone_max: Some(15),
     capabilities: ModelCapabilities {
         battery: true,
         charging: true,
@@ -72,6 +74,7 @@ pub static UNKNOWN_MODEL: ModelDescriptor = ModelDescriptor {
     usage: 0,
     interface_number: -1,
     eq_bands: &[],
+    sidetone_max: None,
     capabilities: ModelCapabilities {
         battery: false,
         charging: false,
@@ -113,6 +116,7 @@ mod tests {
         assert_eq!(wireless.id, RAZER_BLACKSHARK_V2_HYPERSPEED.id);
         assert_eq!(wired.id, RAZER_BLACKSHARK_V2_HYPERSPEED.id);
         assert_eq!(wireless.eq_bands.len(), 10);
+        assert_eq!(wireless.sidetone_max, Some(15));
     }
 
     #[test]

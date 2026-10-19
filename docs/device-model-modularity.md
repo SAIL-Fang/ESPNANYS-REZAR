@@ -157,3 +157,5 @@ sail_app::profiles::all() -> &'static [&'static dyn ProfileFactory]
 - HID selector 改为通过 descriptor 匹配 VID/PID/usage/interface，不再直接读 Razer 常量。
 - `DeviceSnapshot.model` 已加入；CLI 输出 model，UI 侧栏使用 `model.displayName`，不再写死 “BlackShark V2 HS”。
 - 尚未落地：`HeadsetProfile` trait、按型号命令映射、THX `ThxProfile`、UI capability 驱动。
+- 第二步已落地：`sidetone_max` 进入 descriptor；`deriveUiState` 读取 `capabilities.thx`；presentation 输出 `THX 不支持`；Sound/Mic panel 读取 `eqBands`、`sidetoneMax` 和 capability；UI 不再固定 0–15 或 10 段文案。
+- 仍明确推迟：行为型 `HeadsetProfile` trait、按型号命令映射、THX profile；见 `docs/adr/0004-model-descriptor-scope.md`。

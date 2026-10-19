@@ -7,7 +7,7 @@
 <script lang="ts">
   import { device } from "$lib/device.svelte";
   import EqEditor from "./EqEditor.svelte";
-  import { frequencies } from "$lib/presets";
+  import { formatEqBands } from "$lib/presets";
 
   type MicPreset = { id: string; label: string; gains: number[] };
   const MIC_PRESETS: MicPreset[] = [
@@ -36,7 +36,17 @@
   let eqTimer: ReturnType<typeof setTimeout> | null = null;
   let eqSaveEpoch = 0;
 
-  const available = $derived(!!device.thx?.installed && !!device.thx?.capture);
+  const available = $derived(
+    !!device.thx?.installed &&
+      !!device.thx?.capture &&
+      device.status?.model.capabilities.micCapture !== false
+  );
+  const sidetoneSupported = $derived(
+    device.status?.model.capabilities.sidetone !== false &&
+      !!device.status?.model.sidetoneMax
+  );
+  const sidetoneMax = $derived(device.status?.model.sidetoneMax ?? 15);
+  const modelFrequencies = $derived(formatEqBands(device.status?.model.eqBands));
 
   $effect(() => {
     const capture = device.thx?.capture;
@@ -242,7 +252,10 @@
   }
 
   async function changeSidetoneVolume() {
-    const raw = Math.max(0, Math.min(15, Math.round((sidetonePct * 15) / 100)));
+    const raw = Math.max(
+      0,
+      Math.min(sidetoneMax, Math.round((sidetonePct * sidetoneMax) / 100))
+    );
     await device.setSidetoneVolume(raw);
   }
 
@@ -302,13 +315,13 @@
         class="switch"
         class:on={sidetone}
         onclick={toggleSidetone}
-        disabled={!available || device.busy}
+        disabled={!available || !sidetoneSupported || device.busy}
         aria-label="切换侧音"
         aria-pressed={sidetone}
       ></button>
     </div>
     <div class="mic-row">
-      <div class="label"><span>侧音音量</span><small>0–100，映射到硬件 0–15</small></div>
+      <div class="label"><span>侧音音量</span><small>0–100，映射到硬件 0–{sidetoneMax}</small></div>
       <span class="mono-value">{sidetonePct}%</span>
     </div>
     <input
@@ -318,7 +331,7 @@
       max="100"
       step="1"
       bind:value={sidetonePct}
-      disabled={!sidetone || !available || device.busy}
+      disabled={!sidetone || !available || !sidetoneSupported || device.busy}
       aria-label="侧音音量"
       onchange={changeSidetoneVolume}
     />
@@ -497,7 +510,7 @@
 
     <EqEditor
       gains={eqGains}
-      {frequencies}
+      frequencies={modelFrequencies}
       busy={device.busy}
       oninput={updateEq}
       onreset={resetEq}

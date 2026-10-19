@@ -40,6 +40,7 @@ function status(overrides: Partial<DeviceSnapshot> = {}): DeviceSnapshot {
       usage: 1,
       interfaceNumber: 3,
       eqBands: [31, 63, 125, 250, 500, 1000, 2000, 4000, 8000, 16000],
+      sidetoneMax: 15,
       capabilities: {
         battery: true,
         charging: true,
@@ -211,6 +212,21 @@ test("THX without a bound endpoint is unavailable", () => {
   const state = deriveUiState({
     status: status(),
     thx: thx({ endpoint: null }),
+    loading: false
+  });
+  assert.equal(state.kind, "thx_unavailable");
+  assert.equal(state.thxReady, false);
+});
+
+test("model without THX capability is unavailable even when THX is installed", () => {
+  const state = deriveUiState({
+    status: status({
+      model: {
+        ...status().model,
+        capabilities: { ...status().model.capabilities, thx: false }
+      }
+    }),
+    thx: thx(),
     loading: false
   });
   assert.equal(state.kind, "thx_unavailable");
