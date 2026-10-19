@@ -25,6 +25,8 @@ export interface UiState {
   outputBlocked: boolean;
   /** Settings writes are allowed by the UI. Backend still re-checks HID. */
   canWrite: boolean;
+  /** THX is installed, bound, and usable on the current output. */
+  thxReady: boolean;
   powerTitle: string;
   powerDetail: string;
   wiredNotReady: boolean;
@@ -71,6 +73,7 @@ export function deriveUiState({ status, thx, loading }: UiStateInput): UiState {
       powerBlocked: !loading,
       outputBlocked: false,
       canWrite: false,
+      thxReady: false,
       powerTitle: loading ? "正在检测设备" : POWER_COPY.missing.title,
       powerDetail: loading ? "请稍候。" : POWER_COPY.missing.detail,
       wiredNotReady: false
@@ -89,6 +92,7 @@ export function deriveUiState({ status, thx, loading }: UiStateInput): UiState {
       powerBlocked: true,
       outputBlocked: false,
       canWrite: false,
+      thxReady: false,
       powerTitle: copy.title,
       powerDetail: copy.detail,
       wiredNotReady
@@ -101,6 +105,7 @@ export function deriveUiState({ status, thx, loading }: UiStateInput): UiState {
       powerBlocked: false,
       outputBlocked: true,
       canWrite: false,
+      thxReady: false,
       powerTitle: "",
       powerDetail: "",
       wiredNotReady
@@ -114,6 +119,7 @@ export function deriveUiState({ status, thx, loading }: UiStateInput): UiState {
       powerBlocked: false,
       outputBlocked: false,
       canWrite: true,
+      thxReady: false,
       powerTitle: "",
       powerDetail: "",
       wiredNotReady
@@ -125,6 +131,7 @@ export function deriveUiState({ status, thx, loading }: UiStateInput): UiState {
     powerBlocked: false,
     outputBlocked: false,
     canWrite: true,
+    thxReady: true,
     powerTitle: "",
     powerDetail: "",
     wiredNotReady

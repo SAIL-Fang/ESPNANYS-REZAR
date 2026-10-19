@@ -37,6 +37,17 @@
     deriveUiState({ status: device.status, thx: device.thx, loading: device.loading })
   );
   let wiredNotReady = $derived(uiState.wiredNotReady);
+  let thxInstalled = $derived(!!device.thx?.installed);
+  let thxReady = $derived(uiState.thxReady);
+  let thxLabel = $derived(
+    !thxInstalled
+      ? "THX 未连接"
+      : !audioOk
+        ? "THX 暂停"
+        : thxReady
+          ? "THX 就绪"
+          : "THX 不可用"
+  );
   let charging = $derived(
     device.status?.charging.state === "known" && device.status.charging.value
   );
@@ -74,8 +85,8 @@
     <strong class="mono">{fieldText(device.status?.battery, "%")}</strong>
   </div>
   <div class="status-item">
-    <span class="dot" class:on={device.thx?.installed && audioOk} class:warn={!audioOk}></span>
-    <strong>{device.thx?.installed ? (audioOk ? "THX 就绪" : "THX 暂停") : "THX 未连接"}</strong>
+    <span class="dot" class:on={thxReady} class:warn={thxInstalled && !thxReady}></span>
+    <strong>{thxLabel}</strong>
   </div>
   <div class="spacer"></div>
   <button class="btn" onclick={() => device.refresh()} disabled={device.loading}>

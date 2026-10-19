@@ -99,6 +99,7 @@ test("receiver present with powered-off headset is headset_off", () => {
   assert.equal(state.powerBlocked, true);
   assert.equal(state.powerTitle, "耳机未开机");
   assert.equal(state.canWrite, false);
+  assert.equal(state.thxReady, false);
 });
 
 test("power gate wins over a wrong audio route", () => {
@@ -139,6 +140,7 @@ test("online headset with wrong output is output_wrong", () => {
   assert.equal(state.powerBlocked, false);
   assert.equal(state.outputBlocked, true);
   assert.equal(state.canWrite, false);
+  assert.equal(state.thxReady, false);
 });
 
 test("wrong output wins over missing THX", () => {
@@ -164,12 +166,14 @@ test("online headset, correct output, THX ready is ready", () => {
   assert.equal(state.powerBlocked, false);
   assert.equal(state.outputBlocked, false);
   assert.equal(state.canWrite, true);
+  assert.equal(state.thxReady, true);
 });
 
 test("missing THX leaves HID settings available", () => {
   const state = deriveUiState({ status: status(), thx: null, loading: false });
   assert.equal(state.kind, "thx_unavailable");
   assert.equal(state.canWrite, true);
+  assert.equal(state.thxReady, false);
 });
 
 test("THX with an error is unavailable", () => {
