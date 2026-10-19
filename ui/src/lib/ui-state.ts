@@ -36,6 +36,23 @@ export interface UiStateInput {
   loading: boolean;
 }
 
+export interface ReconnectPolicyInput {
+  blocked: boolean;
+  visible: boolean;
+  focused: boolean;
+  busy: boolean;
+}
+
+/** The reconnect loop is UI-driven: no foreground visibility, no HID polling. */
+export function shouldAutoReconnect({
+  blocked,
+  visible,
+  focused,
+  busy
+}: ReconnectPolicyInput): boolean {
+  return blocked && visible && focused && !busy;
+}
+
 const POWER_COPY: Record<"standby" | "missing", { title: string; detail: string }> = {
   standby: {
     title: "耳机未开机",

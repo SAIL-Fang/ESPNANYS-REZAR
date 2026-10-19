@@ -6,7 +6,7 @@
  */
 import test from "node:test";
 import assert from "node:assert/strict";
-import { deriveUiState } from "./ui-state.ts";
+import { deriveUiState, shouldAutoReconnect } from "./ui-state.ts";
 import type { AudioEndpoint, DeviceSnapshot, Field, Link, ThxSnapshot } from "./types";
 
 function field<T>(value: T): Field<T> {
@@ -189,4 +189,27 @@ test("wired telemetry timeout is flagged, but the headset can still be ready", (
   });
   assert.equal(state.kind, "ready");
   assert.equal(state.wiredNotReady, true);
+});
+
+test("reconnect only runs while blocked, visible, focused, and idle", () => {
+  assert.equal(
+    shouldAutoReconnect({ blocked: true, visible: true, focused: true, busy: false }),
+    true
+  );
+  assert.equal(
+    shouldAutoReconnect({ blocked: false, visible: true, focused: true, busy: false }),
+    false
+  );
+  assert.equal(
+    shouldAutoReconnect({ blocked: true, visible: false, focused: true, busy: false }),
+    false
+  );
+  assert.equal(
+    shouldAutoReconnect({ blocked: true, visible: true, focused: false, busy: false }),
+    false
+  );
+  assert.equal(
+    shouldAutoReconnect({ blocked: true, visible: true, focused: true, busy: true }),
+    false
+  );
 });

@@ -7,7 +7,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { device } from "$lib/device.svelte";
-  import { deriveUiState } from "$lib/ui-state";
+  import { deriveUiState, shouldAutoReconnect } from "$lib/ui-state";
 
   let checking = $state(false);
 
@@ -20,12 +20,13 @@
   let detail = $derived(uiState.powerDetail);
 
   async function autoReconnect() {
-    if (!blocked) return;
-    // Never poll HID while the app is hidden, minimized, in the tray, or not
-    // the foreground window. This is a UI-driven reconnect, not a background
-    // service.
-    if (document.hidden || !document.hasFocus()) return;
-    if (checking || device.busy || device.loading) return;
+    const allowed = shouldAutoReconnect({
+      blocked,
+      visible: !document.hidden,
+      focused: document.hasFocus(),
+      busy: checking || device.busy || device.loading
+    });
+    if (!allowed) return;
     checking = true;
     try {
       await device.refresh(true, false);
