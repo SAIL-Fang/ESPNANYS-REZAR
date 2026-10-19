@@ -451,6 +451,7 @@ razer-blackshark-v2-hyperspeed/
 ├─ docs/architecture.md       # Synapse 原架构 + 推荐的低占用架构
 ├─ docs/frontend.md           # 前端选型、页面结构、开源仓库方案
 ├─ docs/design-spec.md        # 按“定方向→定基调→评审”出的完整设计文档
+├─ docs/interaction-state-spec.md # 设备/THX/输出/锁定的唯一状态机与验收矩阵
 ├─ docs/thx-baseline.json     # 冻结基线：DLL/VSSrv SHA256、驱动包、固件、工具链
 ├─ design-system/sail/MASTER.md # ui-ux-pro-max 原始输出（仅作输入，已被 DESIGN.md 覆盖）
 └─ captures/
