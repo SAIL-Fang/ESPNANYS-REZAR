@@ -185,6 +185,16 @@ test("THX with an error is unavailable", () => {
   assert.equal(state.kind, "thx_unavailable");
 });
 
+test("THX without a bound endpoint is unavailable", () => {
+  const state = deriveUiState({
+    status: status(),
+    thx: thx({ endpoint: null }),
+    loading: false
+  });
+  assert.equal(state.kind, "thx_unavailable");
+  assert.equal(state.thxReady, false);
+});
+
 test("wired telemetry timeout is flagged, but the headset can still be ready", () => {
   const state = deriveUiState({
     status: status({ link: "wired", battery: timeout(), charging: timeout() }),

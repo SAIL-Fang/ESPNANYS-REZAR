@@ -112,7 +112,7 @@ export function deriveUiState({ status, thx, loading }: UiStateInput): UiState {
     };
   }
 
-  const thxReady = !!thx?.installed && !thx.error;
+  const thxReady = !!thx?.installed && !thx.error && !!thx.endpoint;
   if (!thxReady) {
     return {
       kind: "thx_unavailable",
