@@ -2539,6 +2539,7 @@ version = "0.1.0"
 dependencies = [
  "hidapi",
  "sail_core",
+ "serde",
 ]
 
 [[package]]
