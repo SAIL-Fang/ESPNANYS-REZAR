@@ -203,5 +203,7 @@ Seam：
 - `ui/src/lib/ui-state.ts`：已实现 `deriveUiState`，页面、电源遮罩、输出弹窗、状态条统一消费。
 - `ui/src/lib/ui-state.test.ts`：12 条 Node 测试，覆盖分类优先级、`canWrite`、`wiredNotReady` 和前台重连策略。
 - `HeadsetPowerGate`：全屏虚化遮罩，只有「退出」；前台每 5 秒静默检测，失焦/隐藏不轮询。
+- `StatusStrip`：THX 徽标由 `UiState.thxReady` 推导，不再单看 `installed && audioOk`。
+- 已实测输出矩阵：音响 → `output_wrong` 阻断窗 → 点「设为默认输出」→ 耳机 → `ready`，THX 徽标同步恢复。
 - 后端写命令：已统一 `require_online`。
-- 尚待真实硬件验证：关机→开机、拔接收器、输出切换、失焦后台不轮询；debug 稳定前不发布。
+- 尚待真实硬件验证：关机→开机、拔接收器、失焦后台不轮询；debug 稳定前不发布。
