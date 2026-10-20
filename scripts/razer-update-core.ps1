@@ -9,15 +9,24 @@
 
 .DESCRIPTION
     只做两件事：
-      1. 在 hosts 中把更新 CDN app-assets.razer.com 和更新清单 manifest.razerapi.com
-         指向 0.0.0.0；
+      1. 在 hosts 中把 Razer 更新控制面域名指向 0.0.0.0，按角色分三组：
+           - 更新清单：manifest.razerapi.com、manifest3.razerapi.com
+           - 安装包：app-assets.razer.com、cdn.razersynapse.com、
+             manifest-assets.razersynapse.com
+           - 端点发现：discovery.razerapi.com、discovery3.razerapi.com
       2. 禁用计划任务 "Razer Upgrade Elevation Service"。
 
     不会修改：
-      - apps.razer.com（Synapse 远程 UI）
+      - apps.razer.com（Synapse 远程 UI 与升级安装器页）。它必须保持可解析，
+        否则设备面板会白屏；代价是更新清单仍能读到，但安装包下载已被
+        app-assets.razer.com 拦住，更新装不上。
       - VSSrv / THX APO / 本地回环控制通道
       - Razer AppEngine / Elevation Service / Game Manager 服务
       - Windows 防火墙规则
+
+    代价：cdn.razersynapse.com / manifest-assets.razersynapse.com 同时承载
+    Synapse 组件（驱动、模块）的在线安装包，屏蔽期间无法在线装组件；
+    需要装组件时先 -Enable，装完再 -Disable。
 
     默认只读；-Disable / -Enable 需要管理员权限，脚本会自动请求提权。
 
@@ -53,7 +62,20 @@ param(
 $ErrorActionPreference = 'Stop'
 
 $script:HostsPath = Join-Path $env:WINDIR 'System32\drivers\etc\hosts'
-$script:Domains = @('app-assets.razer.com', 'manifest.razerapi.com')
+
+# Razer 更新控制面，按角色分组。来源：本机 Razer 日志（2026-10）
+#   installer[engineUpgrade].log -> apps.razer.com/installer（清单）、
+#                                   app-assets.razer.com/files/synapse/RazerAppEngineUpgrade-*.exe
+#   lwi2_*.log                   -> discovery3.razerapi.com、manifest3.razerapi.com、
+#                                   manifest-assets.razersynapse.com
+#   RazerInstaller*.log          -> cdn.razersynapse.com、manifest.razerapi.com
+#   Razer Central Service.log    -> discovery.razerapi.com、manifest.razerapi.com
+$script:DomainGroups = [ordered]@{
+    '更新清单' = @('manifest.razerapi.com', 'manifest3.razerapi.com')
+    '安装包'   = @('app-assets.razer.com', 'cdn.razersynapse.com', 'manifest-assets.razersynapse.com')
+    '端点发现' = @('discovery.razerapi.com', 'discovery3.razerapi.com')
+}
+$script:Domains = @($script:DomainGroups.Values | ForEach-Object { $_ })
 $script:Marker = '# SAIL: block Razer update endpoints'
 $script:TaskName = 'Razer Upgrade Elevation Service'
 $script:HostLines = @($script:Domains | ForEach-Object { "0.0.0.0 $_ $($script:Marker)" })
@@ -220,11 +242,13 @@ function Show-Status {
 
     Write-Host ''
     Write-Host '不会受影响：' -ForegroundColor Gray
-    Write-Host '  · apps.razer.com（Synapse UI）' -ForegroundColor Gray
+    Write-Host '  · apps.razer.com（Synapse 远程 UI；更新清单仍可读，但安装包装不上）' -ForegroundColor Gray
     Write-Host '  · VSSrv / THX APO / 127.0.0.1 控制通道' -ForegroundColor Gray
     Write-Host '  · HID、设备设置、声音' -ForegroundColor Gray
     Write-Host '会被阻止：' -ForegroundColor Gray
-    Write-Host "  · $($script:Domains -join ' / ') 上的更新清单与 RazerAppEngineUpgrade-*.exe 下载" -ForegroundColor Gray
+    foreach ($group in $script:DomainGroups.GetEnumerator()) {
+        Write-Host ("  · {0}：{1}" -f $group.Key, ($group.Value -join ' / ')) -ForegroundColor Gray
+    }
     Write-Host "  · 计划任务 $($script:TaskName)" -ForegroundColor Gray
 }
 
