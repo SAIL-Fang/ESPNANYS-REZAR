@@ -51,7 +51,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\razer-update-core.ps1 -Status
 
 它具体做两件事：
 
-- 在 `hosts` 中把更新下载 CDN `app-assets.razer.com` 指向 `0.0.0.0`；
+- 在 `hosts` 中把更新下载 CDN `app-assets.razer.com` 和更新清单 `manifest.razerapi.com` 指向 `0.0.0.0`；
 - 禁用计划任务 `Razer Upgrade Elevation Service`。
 
 **不会**修改 `apps.razer.com`（雷云 UI）、`VSSrv`、THX APO 或 HID；关闭后只是不再自动获得 Synapse/THX 更新。执行结束会打印 hosts、计划任务、Razer Elevation Service、VSSrv 的验证结果，不保存日志。
@@ -117,7 +117,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\razer-update-core.ps1 -Status
 .\scripts\razer-update-on.cmd
 ```
 
-The script points the update CDN `app-assets.razer.com` to `0.0.0.0` in the hosts file and disables the scheduled task `Razer Upgrade Elevation Service`. It does **not** touch `apps.razer.com`, `VSSrv`, the THX APO, or HID. It is reversible and does not save logs.
+The script points the update CDN `app-assets.razer.com` and the update manifest `manifest.razerapi.com` to `0.0.0.0` in the hosts file and disables the scheduled task `Razer Upgrade Elevation Service`. It does **not** touch `apps.razer.com`, `VSSrv`, the THX APO, or HID. It is reversible and does not save logs.
 
 ### Build and run
 
@@ -205,7 +205,7 @@ scripts\diagnose-thx.cmd            # 只读，逐环 PASS/FAIL + 修复命令
 scripts\diagnose-thx.cmd -Fix       # 管理员：自动修复并复查
 
 # 4) 控制 Razer 自动更新（两个一键脚本，可逆）
-scripts\razer-update-off.cmd        # 挡 app-assets.razer.com + 禁用升级任务
+scripts\razer-update-off.cmd        # 挡 app-assets.razer.com / manifest.razerapi.com + 禁用升级任务
 scripts\razer-update-on.cmd         # 恢复 hosts + 启用升级任务
 
 # 5) 构建 UI
@@ -215,8 +215,9 @@ scripts\ui.cmd build --debug --no-bundle
 scripts\run-ui.cmd
 ```
 
-> **自动更新开关说明**：`razer-update-off` 只挡 `app-assets.razer.com`（更新包下载 CDN），
-> 不动 `apps.razer.com`（Synapse UI）、VSSrv、THX APO、HID；关闭后不会自动获得 Synapse/THX 更新。
+> **自动更新开关说明**：`razer-update-off` 挡 `app-assets.razer.com`（更新包下载 CDN）和
+> `manifest.razerapi.com`（更新清单），不动 `apps.razer.com`（Synapse UI）、VSSrv、THX APO、HID；
+> 关闭后不会自动获得 Synapse/THX 更新。
 > 每次执行结束都会在终端打印“执行后验证”（hosts、升级任务、Razer Elevation Service、VSSrv），不保存日志文件。
 
 > **路径注意**：THX DLL 的 loader 在很深/很长的开发路径下会拒绝加载（表现为栈溢出/access denied）。

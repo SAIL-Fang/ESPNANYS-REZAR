@@ -9,7 +9,8 @@
 
 .DESCRIPTION
     只做两件事：
-      1. 在 hosts 中把更新 CDN app-assets.razer.com 指向 0.0.0.0；
+      1. 在 hosts 中把更新 CDN app-assets.razer.com 和更新清单 manifest.razerapi.com
+         指向 0.0.0.0；
       2. 禁用计划任务 "Razer Upgrade Elevation Service"。
 
     不会修改：
@@ -52,10 +53,10 @@ param(
 $ErrorActionPreference = 'Stop'
 
 $script:HostsPath = Join-Path $env:WINDIR 'System32\drivers\etc\hosts'
-$script:Domain = 'app-assets.razer.com'
-$script:Marker = '# SAIL: block Razer updater CDN'
+$script:Domains = @('app-assets.razer.com', 'manifest.razerapi.com')
+$script:Marker = '# SAIL: block Razer update endpoints'
 $script:TaskName = 'Razer Upgrade Elevation Service'
-$script:HostLine = "0.0.0.0 $($script:Domain) $($script:Marker)"
+$script:HostLines = @($script:Domains | ForEach-Object { "0.0.0.0 $_ $($script:Marker)" })
 $script:ExitCode = 0
 
 function Test-Admin {
@@ -104,8 +105,9 @@ function Get-HostsLines {
 
 function Get-BlockLines {
     $lines = Get-HostsLines
+    $domainPattern = (@($script:Domains | ForEach-Object { [regex]::Escape($_) }) -join '|')
     return @($lines | Where-Object {
-            $_ -match '(?i)app-assets\.razer\.com' -or $_ -match [regex]::Escape($script:Marker)
+            $_ -match $domainPattern -or $_ -match [regex]::Escape($script:Marker)
         })
 }
 
@@ -117,9 +119,9 @@ function Get-Task {
     }
 }
 
-function Get-DnsAddresses {
+function Get-DnsAddresses([string]$Domain) {
     try {
-        return @([System.Net.Dns]::GetHostAddresses($script:Domain) |
+        return @([System.Net.Dns]::GetHostAddresses($Domain) |
                 ForEach-Object { $_.IPAddressToString } |
                 Sort-Object -Unique)
     } catch {
@@ -141,18 +143,17 @@ function Backup-Hosts {
 
 function Set-HostsBlocked([bool]$Blocked) {
     $lines = Get-HostsLines
-    # Only remove SAIL's own marked line. A user's unrelated
-    # app-assets.razer.com mapping must survive -Disable/-Enable.
+    # Remove only SAIL's marked lines. Unrelated user mappings must survive.
     $kept = @($lines | Where-Object {
-            $_ -notmatch [regex]::Escape($script:Marker)
+            $_ -notmatch '(?i)# SAIL: block Razer'
         })
 
     if ($Blocked) {
-        # 去掉文件末尾多余空行，再追加一条
+        # 去掉文件末尾多余空行，再追加每个更新域名的屏蔽项
         while ($kept.Count -gt 0 -and [string]::IsNullOrWhiteSpace($kept[$kept.Count - 1])) {
             $kept = @($kept | Select-Object -First ($kept.Count - 1))
         }
-        $kept += $script:HostLine
+        $kept += $script:HostLines
     }
 
     # Write a sibling file first, then replace. An interrupted/AV-locked write
@@ -174,22 +175,24 @@ function Show-Status {
 
     $block = @(Get-BlockLines)
     if ($block.Count -gt 0) {
-        Write-Ok "hosts 已包含屏蔽项：$($block[0])"
+        Write-Ok "hosts 已包含 $($block.Count) 条 Razer 更新屏蔽项"
     } else {
-        Write-Warn "hosts 没有屏蔽 $($script:Domain)"
+        Write-Warn "hosts 没有屏蔽任何 Razer 更新域名"
     }
 
-    $dns = @(Get-DnsAddresses)
-    if ($dns.Count -eq 0) {
-        if ($block.Count -gt 0) {
-            Write-Ok "DNS 已无法解析 $($script:Domain)（hosts 已挡）"
+    foreach ($domain in $script:Domains) {
+        $dns = @(Get-DnsAddresses $domain)
+        if ($dns.Count -eq 0) {
+            if ($block.Count -gt 0) {
+                Write-Ok "DNS 已无法解析 $domain（hosts 已挡）"
+            } else {
+                Write-Warn "DNS 当前解析不到 $domain（可能是网络/DNS问题，不代表已封锁）"
+            }
+        } elseif ($dns -contains '0.0.0.0') {
+            Write-Ok "$domain -> 0.0.0.0（更新被挡）"
         } else {
-            Write-Warn "DNS 当前解析不到 $($script:Domain)（可能是网络/DNS问题，不代表已封锁）"
+            Write-Warn "$domain -> $($dns -join ', ')（仍可访问）"
         }
-    } elseif ($dns -contains '0.0.0.0') {
-        Write-Ok "$($script:Domain) -> 0.0.0.0（更新下载被挡）"
-    } else {
-        Write-Warn "$($script:Domain) -> $($dns -join ', ')（仍可下载更新）"
     }
 
     $task = Get-Task
@@ -221,7 +224,7 @@ function Show-Status {
     Write-Host '  · VSSrv / THX APO / 127.0.0.1 控制通道' -ForegroundColor Gray
     Write-Host '  · HID、设备设置、声音' -ForegroundColor Gray
     Write-Host '会被阻止：' -ForegroundColor Gray
-    Write-Host "  · $($script:Domain) 上的 RazerAppEngineUpgrade-*.exe 下载" -ForegroundColor Gray
+    Write-Host "  · $($script:Domains -join ' / ') 上的更新清单与 RazerAppEngineUpgrade-*.exe 下载" -ForegroundColor Gray
     Write-Host "  · 计划任务 $($script:TaskName)" -ForegroundColor Gray
 }
 
@@ -230,7 +233,6 @@ function Show-Verification([string]$Mode) {
 
     $failed = $false
     $block = @(Get-BlockLines)
-    $dns = @(Get-DnsAddresses)
     $task = Get-Task
     $vssrv = Get-Service -Name 'VSSrv' -ErrorAction SilentlyContinue
     $elev = Get-Service -Name 'Razer Elevation Service' -ErrorAction SilentlyContinue
@@ -252,10 +254,13 @@ function Show-Verification([string]$Mode) {
             $failed = $true
         }
 
-        if ($dns.Count -eq 0 -or $dns -contains '0.0.0.0') {
-            Write-Ok "DNS: $($script:Domain) 已不可达"
-        } else {
-            Write-Warn "DNS: 仍解析到 $($dns -join ', ')（hosts 已写入，但可能被 DNS 缓存/代理影响）"
+        foreach ($domain in $script:Domains) {
+            $dns = @(Get-DnsAddresses $domain)
+            if ($dns.Count -eq 0 -or $dns -contains '0.0.0.0') {
+                Write-Ok "DNS: $domain 已不可达"
+            } else {
+                Write-Warn "DNS: $domain 仍解析到 $($dns -join ', ')（hosts 已写入，但可能被 DNS 缓存/代理影响）"
+            }
         }
     } else {
         if ($block.Count -eq 0) {
@@ -304,7 +309,7 @@ function Invoke-Disable {
     Write-Title '关闭 Razer 自动更新'
     [void](Backup-Hosts)
     Set-HostsBlocked $true
-    Write-Ok "hosts: $($script:HostLine)"
+    Write-Ok "hosts: 已写入 $($script:Domains.Count) 个 Razer 更新域名屏蔽项"
     [void](ipconfig.exe /flushdns 2>&1)
 
     $task = Get-Task
@@ -337,7 +342,7 @@ function Invoke-Enable {
     Write-Title '恢复 Razer 自动更新'
     [void](Backup-Hosts)
     Set-HostsBlocked $false
-    Write-Ok "hosts: 已移除 $($script:Domain) 屏蔽项"
+    Write-Ok "hosts: 已移除 $($script:Domains.Count) 个 Razer 更新域名屏蔽项"
     [void](ipconfig.exe /flushdns 2>&1)
 
     $task = Get-Task
