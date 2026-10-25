@@ -5,11 +5,12 @@
  * SPDX-License-Identifier: MIT
  */
 import { invoke } from "@tauri-apps/api/core";
-import type { DeviceSnapshot, EqPreset, ModelDescriptor, ThxSnapshot } from "./types";
+import type { DeviceSnapshot, DeviceSummary, EqPreset, ModelDescriptor, ThxSnapshot } from "./types";
 
 export const api = {
   getStatus: () => invoke<DeviceSnapshot>("get_status"),
   getDevices: () => invoke<ModelDescriptor[]>("get_devices"),
+  getDeviceSummaries: () => invoke<DeviceSummary[]>("get_device_summaries"),
   setActiveDevice: (modelId: string) => invoke<void>("set_active_device", { modelId }),
   getEqPresets: () => invoke<EqPreset[]>("get_eq_presets"),
   setSidetone: (enabled: boolean) => invoke<void>("set_sidetone", { enabled }),

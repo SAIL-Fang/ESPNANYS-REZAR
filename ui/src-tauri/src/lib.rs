@@ -2,7 +2,7 @@
 // Author: SAIL
 // Copyright (c) 2026 SAIL
 // SPDX-License-Identifier: MIT
-use sail_app::{set_active_pid, DeviceSnapshot, EqPreset, SailApp, ThxSnapshot};
+use sail_app::{device_summaries, set_active_pid, DeviceSnapshot, DeviceSummary, EqPreset, SailApp, ThxSnapshot};
 use sail_hid::{list_models, model_for_product_id, ModelDescriptor};
 use std::fs;
 use std::path::PathBuf;
@@ -85,6 +85,11 @@ async fn get_status() -> Result<DeviceSnapshot, String> {
 #[tauri::command]
 async fn get_devices() -> Result<Vec<ModelDescriptor>, String> {
     blocking(|| list_models().map_err(|error| error.to_string())).await
+}
+
+#[tauri::command]
+async fn get_device_summaries() -> Result<Vec<DeviceSummary>, String> {
+    blocking(|| Ok(device_summaries())).await
 }
 
 #[tauri::command]
@@ -291,6 +296,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             get_status,
             get_devices,
+            get_device_summaries,
             set_active_device,
             get_eq_presets,
             set_sidetone,

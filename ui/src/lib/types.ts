@@ -68,6 +68,17 @@ export type DeviceSnapshot = {
   issues: string[];
 };
 
+export type DeviceSummary = {
+  model: ModelDescriptor;
+  connected: boolean;
+  link: Link;
+  battery: Field<number>;
+  charging: Field<boolean>;
+  thxCapable: boolean;
+  currentOutput: boolean;
+  active: boolean;
+};
+
 export type CaptureSnapshot = {
   device: string | null;
   voiceGate: boolean | null;

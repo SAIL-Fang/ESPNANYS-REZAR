@@ -112,7 +112,13 @@ export function derivePresentation({
 }: PresentationInput): Presentation {
   const modelName = status?.model.displayName ?? "耳机";
   const power = powerCopy(uiState);
-  const target = status?.audioOutput.endpoints.find((endpoint) => endpoint.isHeadset) ?? null;
+  const needle = status?.model.capabilities.eqViaThx ? "usb sound card" : "blackshark";
+  const target =
+    status?.audioOutput.endpoints.find(
+      (endpoint) => endpoint.isHeadset && endpoint.name.toLowerCase().includes(needle)
+    ) ??
+    status?.audioOutput.endpoints.find((endpoint) => endpoint.isHeadset) ??
+    null;
   const current = status?.audioOutput.name ?? "未知设备";
 
   return {
@@ -134,4 +140,13 @@ export function derivePresentation({
     routeCurrentLabel: current,
     routeTargetLabel: target?.name ?? `未找到 ${modelName} 输出，请检查连接`
   };
+}
+
+/** The active model's output target, not just "some headset". */
+export function outputMatchesModel(status: DeviceSnapshot | null): boolean {
+  const name = status?.audioOutput.name?.toLowerCase() ?? "";
+  if (!name) return false;
+  return status?.model.capabilities.eqViaThx
+    ? name.includes("usb sound card")
+    : name.includes("blackshark");
 }

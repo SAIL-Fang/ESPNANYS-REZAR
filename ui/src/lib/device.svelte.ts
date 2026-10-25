@@ -9,6 +9,7 @@ import { DEFAULT_EQ_GAINS, DEFAULT_NORMALIZATION_LEVEL } from "./presets";
 import type {
   AudioEndpoint,
   DeviceSnapshot,
+  DeviceSummary,
   EqPreset,
   ModelDescriptor,
   ThxSnapshot
@@ -40,6 +41,7 @@ export class DeviceStore {
   status = $state<DeviceSnapshot | null>(null);
   thx = $state<ThxSnapshot | null>(null);
   presets = $state<EqPreset[]>([]);
+  summaries = $state<DeviceSummary[]>([]);
   devices = $state<ModelDescriptor[]>([]);
   activeModelId = $state("");
   loading = $state(true);
@@ -102,30 +104,18 @@ export class DeviceStore {
     if (epoch === this.refreshEpoch) apply();
   }
 
-  private endpointFor(model: ModelDescriptor, status: DeviceSnapshot | null): AudioEndpoint | null {
-    const endpoints = status?.audioOutput.endpoints ?? [];
-    const needle = model.capabilities.eqViaThx ? "usb sound card" : "blackshark";
-    return (
-      endpoints.find((endpoint) => endpoint.name.toLowerCase().includes(needle)) ?? null
-    );
+  private applySummaries(summaries: DeviceSummary[]) {
+    this.summaries = summaries;
+    this.devices = summaries.map((summary) => summary.model);
   }
 
-  private async ensureOutput(model: ModelDescriptor, status: DeviceSnapshot | null) {
-    const endpoint = this.endpointFor(model, status);
-    if (!endpoint || endpoint.isDefault) return;
+  async loadHub() {
+    this.loading = true;
     try {
-      await api.setDefaultAudioOutput(endpoint.id);
-    } catch {
-      // The route gate still surfaces this; selection must not fail hard.
-    }
-  }
-
-  async loadDevices() {
-    try {
-      const devices = await api.getDevices();
-      this.devices = devices;
-      if (!devices.length) {
-        await this.refresh(false, true);
+      const summaries = await api.getDeviceSummaries();
+      this.applySummaries(summaries);
+      if (!summaries.length) {
+        this.activeModelId = "";
         return;
       }
       let preferred = "";
@@ -134,30 +124,50 @@ export class DeviceStore {
       } catch {
         // localStorage can be unavailable; fall back to the first model.
       }
-      let status: DeviceSnapshot | null = null;
-      try {
-        status = await api.getStatus();
-      } catch {
-        // The first refresh will surface the real error.
-      }
-      const query = (status?.audioOutput.name ?? "").toLowerCase();
-      const fromOutput = devices.find((model) => {
-        if (model.capabilities.eqViaThx) return query.includes("usb sound card");
-        return query.includes("hyperspeed") || query.includes("2.4");
-      });
-      const active = devices.find((model) => model.id === preferred) ?? fromOutput ?? devices[0];
-      this.activeModelId = active.id;
-      await api.setActiveDevice(active.id);
-      await this.ensureOutput(active, status);
+      const active =
+        summaries.find((summary) => summary.model.id === preferred) ?? summaries[0];
+      this.activeModelId = active.model.id;
+      await api.setActiveDevice(active.model.id);
+      this.applySummaries(
+        summaries.map((summary) => ({
+          ...summary,
+          active: summary.model.id === active.model.id
+        }))
+      );
     } catch (error) {
       this.error = `无法读取设备列表：${errorText(error)}`;
+    } finally {
+      this.loading = false;
     }
-    await this.refresh(false, true);
   }
 
-  async selectDevice(modelId: string) {
-    if (!modelId || modelId === this.activeModelId) return;
-    const model = this.devices.find((item) => item.id === modelId);
+  async refreshSummaries() {
+    try {
+      const summaries = await api.getDeviceSummaries();
+      if (!summaries.length) {
+        this.applySummaries([]);
+        this.activeModelId = "";
+        return;
+      }
+      let activeId = this.activeModelId;
+      if (!summaries.some((summary) => summary.model.id === activeId)) {
+        activeId = summaries[0].model.id;
+        this.activeModelId = activeId;
+        await api.setActiveDevice(activeId);
+      }
+      this.applySummaries(
+        summaries.map((summary) => ({
+          ...summary,
+          active: summary.model.id === activeId
+        }))
+      );
+    } catch (error) {
+      this.error = `无法刷新设备库：${errorText(error)}`;
+    }
+  }
+
+  async activateDevice(modelId: string) {
+    if (!modelId) return;
     await api.setActiveDevice(modelId);
     this.activeModelId = modelId;
     try {
@@ -165,13 +175,22 @@ export class DeviceStore {
     } catch {
       // Remembering the selection is best-effort.
     }
-    if (model) await this.ensureOutput(model, this.status);
     this.status = null;
     this.thx = null;
     this.presets = [];
     this.defaultEqApplied = false;
     this.normalizationApplied = false;
-    await this.refresh(false, true);
+  }
+
+  outputEndpoint(): AudioEndpoint | null {
+    const model = this.devices.find((item) => item.id === this.activeModelId);
+    if (!model) return null;
+    const needle = model.capabilities.eqViaThx ? "usb sound card" : "blackshark";
+    return (
+      this.status?.audioOutput.endpoints.find(
+        (endpoint) => endpoint.isHeadset && endpoint.name.toLowerCase().includes(needle)
+      ) ?? null
+    );
   }
 
   async refresh(silent = false, includeThx = true) {

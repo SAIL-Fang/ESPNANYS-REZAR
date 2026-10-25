@@ -17,8 +17,8 @@ use sail_core::{
     FRAME_LEN, HYPERSPEED_EQ_GAINS, USB_SOUND_CARD_EQ_GAINS,
 };
 use sail_hid::{
-    model_for_product_id, HidDevice, HidTransport, ModelDescriptor, PID_USB_SOUND_CARD, PID_WIRED,
-    PID_WIRELESS,
+    enumerate, model_for_product_id, HidDevice, HidTransport, ModelDescriptor, PID_USB_SOUND_CARD,
+    PID_WIRED, PID_WIRELESS,
 };
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -191,6 +191,74 @@ impl Link {
             Self::Unknown => "unknown",
         }
     }
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeviceSummary {
+    pub model: ModelDescriptor,
+    pub connected: bool,
+    pub link: Link,
+    pub battery: Field<u8>,
+    pub charging: Field<bool>,
+    pub thx_capable: bool,
+    pub current_output: bool,
+    pub active: bool,
+}
+
+fn present_models() -> Vec<(ModelDescriptor, u16)> {
+    let Ok(devices) = enumerate() else {
+        return Vec::new();
+    };
+    let mut present = Vec::new();
+    for device in devices {
+        let Some(model) = model_for_product_id(device.product_id) else {
+            continue;
+        };
+        if device.usage_page != model.usage_page || device.usage != model.usage {
+            continue;
+        }
+        if present
+            .iter()
+            .any(|(known, _): &(ModelDescriptor, u16)| known.id == model.id)
+        {
+            continue;
+        }
+        present.push((model.clone(), device.product_id));
+    }
+    present
+}
+
+fn output_matches_model(model: &ModelDescriptor, output: &audio_route::AudioOutput) -> bool {
+    let Some(name) = output.name.as_deref() else {
+        return false;
+    };
+    let name = name.to_ascii_lowercase();
+    if model.capabilities.eq_via_thx {
+        name.contains("usb sound card")
+    } else {
+        name.contains("blackshark")
+    }
+}
+
+pub fn device_summaries() -> Vec<DeviceSummary> {
+    let active = active_pid();
+    present_models()
+        .into_iter()
+        .map(|(_model, pid)| {
+            let snapshot = SailApp::with_pid(Some(pid)).snapshot();
+            DeviceSummary {
+                model: snapshot.model.clone(),
+                connected: snapshot.connected,
+                link: snapshot.link,
+                battery: snapshot.battery,
+                charging: snapshot.charging,
+                thx_capable: snapshot.model.capabilities.thx,
+                current_output: output_matches_model(&snapshot.model, &snapshot.audio_output),
+                active: active == Some(pid),
+            }
+        })
+        .collect()
 }
 
 #[derive(Debug, Clone, Serialize)]

@@ -9,6 +9,11 @@
   import { derivePresentation } from "$lib/presentation";
   import { deriveUiState } from "$lib/ui-state";
 
+  interface Props {
+    onBack?: () => void;
+  }
+
+  let { onBack = () => {} }: Props = $props();
   let uiState = $derived(
     deriveUiState({ status: device.status, thx: device.thx, loading: device.loading })
   );
@@ -66,6 +71,7 @@
       </div>
 
       <div class="route-gate-actions">
+        <button class="btn ghost" type="button" onclick={onBack}>返回设备库</button>
         <button class="btn ghost" type="button" onclick={quit}>退出</button>
       </div>
 

@@ -6,7 +6,7 @@
  */
 import test from "node:test";
 import assert from "node:assert/strict";
-import { derivePresentation } from "./presentation.ts";
+import { derivePresentation, outputMatchesModel } from "./presentation.ts";
 import { deriveUiState } from "./ui-state.ts";
 import type { AudioEndpoint, DeviceSnapshot, Field, ThxSnapshot } from "./types";
 
@@ -74,6 +74,48 @@ function status(overrides: Partial<DeviceSnapshot> = {}): DeviceSnapshot {
     ...overrides
   };
 }
+
+function usbStatus(outputName: string): DeviceSnapshot {
+  const base = status();
+  return {
+    ...base,
+    link: "wired",
+    model: {
+      ...base.model,
+      id: "razer.blackshark_v2_usb_sound_card",
+      displayName: "BlackShark V2 (USB Sound Card)",
+      wirelessPid: null,
+      wiredPid: 0x0529,
+      usagePage: 0xffa0,
+      sidetoneMax: null,
+      capabilities: {
+        ...base.model.capabilities,
+        battery: false,
+        charging: false,
+        firmware: false,
+        serial: false,
+        autoPowerOff: false,
+        dongleLed: false,
+        eqViaThx: true,
+        sidetone: false
+      }
+    },
+    audioOutput: { ...base.audioOutput, name: outputName, isHeadset: true }
+  };
+}
+
+test("output target follows the active model", () => {
+  assert.equal(outputMatchesModel(status()), true);
+  assert.equal(
+    outputMatchesModel({
+      ...status(),
+      audioOutput: { ...status().audioOutput, name: "Razer USB Sound Card" }
+    }),
+    false
+  );
+  assert.equal(outputMatchesModel(usbStatus("扬声器 (Razer USB Sound Card)")), true);
+  assert.equal(outputMatchesModel(usbStatus("Razer BlackShark V2 HS 2.4")), false);
+});
 
 function thx(overrides: Partial<ThxSnapshot> = {}): ThxSnapshot {
   return {

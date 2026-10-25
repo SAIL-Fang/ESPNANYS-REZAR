@@ -217,9 +217,10 @@ Seam：
 - 连接生命周期已集中到 `ui/src/lib/connection-lifecycle.ts`：一个 5 秒 tick，离线每 tick 重连，在线每 2 tick（10 秒）刷新状态；失焦/隐藏不调用 refresh；前台事件立即检查；HID 恢复后分两阶段刷新 HID/THX。
 - 生命周期测试 6 条，覆盖初始全量刷新、在线节流、离线两阶段恢复、失焦、busy 和 stop 清理；状态测试 16 条。
 - 展示已集中到 `ui/src/lib/presentation.ts`：连接/传输标签、状态 badge、电量/充电、THX 标签、电源遮罩 copy、输出阻断 copy 和 route target 均由同一纯函数生成；`DevicePanel`、`StatusStrip`、`HeadsetPowerGate`、`AudioRouteGate` 和首页只渲染。
-- 展示测试 5 条，覆盖无线、关机、无接收器、输出错误和 THX capability。
+- 展示测试 6 条，覆盖无线、关机、无接收器、输出错误、THX capability 和按 active model 的输出匹配。
 - 型号能力：`deriveUiState` 只在该型号声明 `capabilities.thx` 时报告 THX ready；presentation 对无 THX 型号显示「THX 不支持」；Sound/Mic panel 使用 descriptor 的 `eqBands`、`sidetoneMax` 和 capability。行为型 `HeadsetProfile` 仍推迟。
-- 第二型号已实测：`0529` 在设备选择器中出现，切换时自动把默认输出切到 USB Sound Card，THX 容器随之绑定，THX 就绪；电池/侧音显示「不支持」，不伪造。
+- 第二型号已实测：`0529` 出现在设备库；从 Hub 进入后才加载工作区，输出 gate 的目标为 `Razer USB Sound Card`，THX 容器随正确输出绑定；电池/侧音显示「不支持」，不伪造。
 - 工厂预设已按型号分开：1390 game `[-7,-5,-3,-3,3,4,-2,-3,-3,-3]`，0529 game `[-3,-3,-4,0,5,5,4,1,0,-1]`；两者 custom 默认均为 `[1,-5,-3,0,1,1,1,1,1,-3]`。0529 的 game 已在 UI 实测写入。
 - 第二型号麦克风页已实测：THX capture 设备从 HyperSpeed 麦克风切到 `麦克风 (Razer USB Sound Card)`，麦克风音量/降噪/噪声门/标准化/EQ 可用；硬件侧音因能力缺失禁用。
+- 设备库已落地：启动永远进入 Hub；卡片显示连接/待机、电量/充电（支持时）、THX 能力、active 和输出是否指向；选择设备不自动改默认输出；Hub 不受电源/输出 gate 阻塞；工作区才显示 gate，gate 提供返回设备库。
 - 尚待完整硬件矩阵：1390 开机自动解锁、拔接收器、失焦后台不轮询；第二型号重启恢复仍需人工验收。

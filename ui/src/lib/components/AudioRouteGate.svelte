@@ -6,14 +6,18 @@
 -->
 <script lang="ts">
   import { device } from "$lib/device.svelte";
-  import { derivePresentation } from "$lib/presentation";
+  import { derivePresentation, outputMatchesModel } from "$lib/presentation";
   import { deriveUiState } from "$lib/ui-state";
 
+  interface Props {
+    onBack?: () => void;
+  }
+
+  let { onBack = () => {} }: Props = $props();
   let busy = $state(false);
   let error = $state("");
 
-  let endpoints = $derived(device.status?.audioOutput?.endpoints ?? []);
-  let target = $derived(endpoints.find((endpoint) => endpoint.isHeadset) ?? null);
+  let target = $derived(device.outputEndpoint());
   let uiState = $derived(
     deriveUiState({ status: device.status, thx: device.thx, loading: device.loading })
   );
@@ -25,7 +29,10 @@
       loading: device.loading
     })
   );
-  let blocked = $derived(uiState.outputBlocked);
+  let blocked = $derived(
+    !uiState.powerBlocked &&
+      (uiState.outputBlocked || (!!device.status && !outputMatchesModel(device.status)))
+  );
 
   async function apply() {
     if (!target || busy) return;
@@ -81,6 +88,7 @@
         </button>
         <div class="route-gate-secondary">
           <button class="btn" type="button" onclick={openSettings}>打开声音设置</button>
+          <button class="btn ghost" type="button" onclick={onBack}>返回设备库</button>
           <button class="btn ghost" type="button" onclick={quit}>退出</button>
         </div>
       </div>

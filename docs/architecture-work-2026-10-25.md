@@ -25,6 +25,17 @@ movie  [ 4,  4,  3, 0,-3,-1, 3, 5, 2,  1]
 custom [ 1, -5, -3, 0, 1, 1, 1, 1, 1, -3]  (S.A.I.L.)
 ```
 
+## Razer hub identification observed locally
+
+Razer Dashboard's `validDevices` records identify devices by `productId`,
+`realProductId`, `deviceContainerId`, `category`, localized `name`, `useThx`,
+`hasBattery`/`powerStatus`, and `setupStatus`. The connected cards observed were
+`1321 Razer USB Sound Card` (no battery, `useThx: true`) and
+`1390 / realProductId 1381 BlackShark V2 HyperSpeed` (battery, `useThx: true`).
+Razer refreshes card state from `connectedDevices` storage events and only
+enters the product UI after a card is selected. It does not query live THX for
+every card.
+
 ## Implementation
 
 - `ModelDescriptor` gained the `0529` profile and `eq_via_thx`.
@@ -36,11 +47,12 @@ custom [ 1, -5, -3, 0, 1, 1, 1, 1, 1, -3]  (S.A.I.L.)
 
 ## Verification
 
-- UI state tests: 16 pass; lifecycle: 6; presentation: 5.
+- UI state tests: 16 pass; lifecycle: 6; presentation: 6.
 - `svelte-check`: 0 errors / 0 warnings.
 - `cargo test --workspace`: pass; `cargo check`/clippy pass.
 - Manual debug UI: both models appear; selecting USB Sound Card switches output and reaches THX ready; the 0529 game curve `[-3,-3,-4,0,5,5,4,1,0,-1]` was written and read back in the UI.
 - The 0529 microphone page selected `麦克风 (Razer USB Sound Card)` and exposed the THX capture controls; hardware sidetone is disabled because the model declares no sidetone.
+- The device hub is now the always-on landing view. Cards use per-device summaries (`get_device_summaries`) and never switch output or THX. Entering a card sets the active model only; the output gate appears inside the workspace with the model-specific endpoint. Hub is unaffected by power/output gates; both workspace gates can return to the hub. See ADR-0007.
 - THX `SetRenderEQGains` was called successfully on the real DLL for both container paths.
 
 ## Boundary
