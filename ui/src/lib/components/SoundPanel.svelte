@@ -22,6 +22,7 @@
   let level = $state(DEFAULT_NORMALIZATION_LEVEL);
   let normalizationOn = $state(false);
   let synced = $state(false);
+  let initialized = $state(false);
 
   let available = $derived(
     !!device.thx?.installed &&
@@ -51,6 +52,17 @@
     }
   });
 
+  $effect(() => {
+    if (initialized || !device.presets.length || !device.eqConfig) return;
+    const requested = device.eqConfig.selected ?? "custom";
+    const selected = device.presets.find((preset) => preset.id === requested)
+      ? requested
+      : "custom";
+    eqPreset = selected;
+    gains = [...device.effectiveGains(selected)];
+    initialized = true;
+  });
+
   function cancelAutoSave() {
     if (saveTimer) {
       clearTimeout(saveTimer);
@@ -68,7 +80,9 @@
 
   async function persistGains(next: number[]) {
     savingEq = true;
-    await device.setEqGains([...next]);
+    const presetId = eqPreset;
+    const ok = await device.setEqGains([...next]);
+    if (ok) await device.saveEqPreset(presetId, next);
     savingEq = false;
   }
 
@@ -82,15 +96,16 @@
     const ok = await device.setEqPreset(id, preset.label);
     if (!ok) return;
     eqPreset = id;
-    gains = [...preset.gains];
-    // Write the full 10-band curve as well as the preset index, so the
-    // hardware actually matches the curve shown in the editor.
-    await device.setEqGains([...preset.gains]);
+    const next = device.effectiveGains(id);
+    gains = next;
+    const wrote = await device.setEqGains([...next]);
+    if (wrote) await device.selectEqPreset(id);
   }
 
   function updateGain(index: number, value: number) {
     if (!Number.isFinite(value)) return;
-    eqPreset = "custom";
+    // Editing a preset keeps that preset selected. It is still a modified
+    // curve, but the UI does not relabel it or jump to Custom.
     const next = gains.map((gain, slot) => (slot === index ? value : gain));
     gains = next;
     scheduleGainSave(next);
@@ -101,14 +116,15 @@
     // Reset the mode the user is looking at. Do not silently jump to Custom:
     // Game/Music/Movie reset to their factory curve and stay selected.
     const preset = resetPreset;
-    const next = [...(preset?.gains ?? DEFAULT_GAINS)];
+    const next = preset ? device.factoryGains(preset.id) : [...DEFAULT_GAINS];
     if (preset) {
       const ok = await device.setEqPreset(preset.id, preset.label);
       if (!ok) return;
       eqPreset = preset.id;
     }
     gains = next;
-    await device.setEqGains(next);
+    const wrote = await device.setEqGains(next);
+    if (wrote && preset) await device.clearEqPreset(preset.id);
   }
 
   onDestroy(() => {
@@ -192,7 +208,7 @@
     <p class="muted">均衡器需要 10 段数据。</p>
   {/if}
 
-  <p class="inline-status">{savingEq ? "均衡器写入中…" : device.notice}</p>
+  <p class="inline-status">{savingEq ? "均衡器写入中…" : device.eqConfigNotice || device.notice}</p>
 </section>
 
 <div class="bottom-grid">

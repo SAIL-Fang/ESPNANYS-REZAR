@@ -44,6 +44,24 @@ model profile. A preset default is not a user setting: the user's current
 custom curve must not be overwritten when the application updates its factory
 defaults.
 
+## Preset override
+
+A user-edited curve stored under a selected preset mode. The mode remains
+Game/Music/Movie/Custom; the override is the delta from that mode's factory
+curve. Reset removes the override and restores the factory curve.
+
+## Selected preset
+
+The last preset explicitly selected or edited for a model. It is remembered in
+the EQ configuration and applied to the hardware after the model's output is
+active on the next start.
+
+## EQ configuration
+
+The versioned JSON file containing per-model selected presets and sparse preset
+overrides. A missing entry means the factory curve; a missing file is an empty
+configuration and is created lazily.
+
 ## Capability parity
 
 Two model profiles are feature-equivalent only for capabilities their hardware

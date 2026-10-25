@@ -53,6 +53,7 @@ every card.
 - Manual debug UI: both models appear; selecting USB Sound Card switches output and reaches THX ready; the 0529 game curve `[-3,-3,-4,0,5,5,4,1,0,-1]` was written and read back in the UI.
 - The 0529 microphone page selected `麦克风 (Razer USB Sound Card)` and exposed the THX capture controls; hardware sidetone is disabled because the model declares no sidetone.
 - The device hub is now the always-on landing view. Cards use per-device summaries (`get_device_summaries`) and never switch output or THX. Entering a card sets the active model only; the output gate appears inside the workspace with the model-specific endpoint. Hub is unaffected by power/output gates; both workspace gates can return to the hub. See ADR-0007.
+- EQ preset edits now keep the selected mode, and Reset restores that mode's factory curve. A sparse, versioned `%APPDATA%\SAIL\ESPNANYS-REZAR\eq-presets.json` stores per-model overrides and the last selected preset. Missing files are lazy-initialized; corrupt files are backed up; writes happen only after the hardware succeeds. Startup reapplies the selected preset after the active model's output is correct. See ADR-0008.
 - THX `SetRenderEQGains` was called successfully on the real DLL for both container paths.
 
 ## Boundary

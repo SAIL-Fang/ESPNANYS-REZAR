@@ -79,6 +79,12 @@ export type DeviceSummary = {
   active: boolean;
 };
 
+export type EqPresetConfig = {
+  selected: string | null;
+  presets: Record<string, number[]>;
+  notice: string | null;
+};
+
 export type CaptureSnapshot = {
   device: string | null;
   voiceGate: boolean | null;

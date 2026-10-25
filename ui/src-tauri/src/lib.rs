@@ -2,11 +2,13 @@
 // Author: SAIL
 // Copyright (c) 2026 SAIL
 // SPDX-License-Identifier: MIT
+use sail_app::eq_config::{self, valid_gains, EqConfigView};
 use sail_app::{device_summaries, set_active_pid, DeviceSnapshot, DeviceSummary, EqPreset, SailApp, ThxSnapshot};
 use sail_hid::{list_models, model_for_product_id, ModelDescriptor};
 use std::fs;
 use std::path::PathBuf;
 use std::process::Command as ProcessCommand;
+use std::sync::{Mutex, OnceLock};
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{Manager, WindowEvent};
@@ -45,6 +47,37 @@ fn install_embedded_thx_helper() {
 
 fn app() -> SailApp {
     SailApp::new()
+}
+
+fn eq_config_path() -> Result<PathBuf, String> {
+    let appdata = std::env::var_os("APPDATA")
+        .ok_or_else(|| "APPDATA is unavailable; cannot locate the EQ config".to_string())?;
+    Ok(PathBuf::from(appdata)
+        .join("SAIL")
+        .join("ESPNANYS-REZAR")
+        .join("eq-presets.json"))
+}
+
+fn eq_config_lock() -> &'static Mutex<()> {
+    static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+    LOCK.get_or_init(|| Mutex::new(()))
+}
+
+fn locked_eq_config(path: &PathBuf) -> Result<(eq_config::EqConfig, Option<String>), String> {
+    let _guard = eq_config_lock()
+        .lock()
+        .map_err(|_| "EQ config lock is poisoned".to_string())?;
+    Ok(eq_config::load(path))
+}
+
+fn save_locked_eq_config(
+    path: &PathBuf,
+    config: &eq_config::EqConfig,
+) -> Result<(), String> {
+    let _guard = eq_config_lock()
+        .lock()
+        .map_err(|_| "EQ config lock is poisoned".to_string())?;
+    eq_config::save_atomic(path, config).map_err(|error| format!("write EQ config: {error}"))
 }
 
 fn show_main(app: &tauri::AppHandle) {
@@ -90,6 +123,72 @@ async fn get_devices() -> Result<Vec<ModelDescriptor>, String> {
 #[tauri::command]
 async fn get_device_summaries() -> Result<Vec<DeviceSummary>, String> {
     blocking(|| Ok(device_summaries())).await
+}
+
+#[tauri::command]
+async fn get_eq_config(model_id: String) -> Result<EqConfigView, String> {
+    let path = eq_config_path()?;
+    blocking(move || {
+        let (config, notice) = locked_eq_config(&path)?;
+        Ok(config.view(&model_id, notice))
+    })
+    .await
+}
+
+#[tauri::command]
+async fn select_eq_preset(model_id: String, preset_id: String) -> Result<EqConfigView, String> {
+    if !eq_config::is_preset_id(&preset_id) {
+        return Err(format!("unknown EQ preset: {preset_id}"));
+    }
+    let path = eq_config_path()?;
+    blocking(move || {
+        let (mut config, notice) = locked_eq_config(&path)?;
+        config.set_selected(&model_id, &preset_id);
+        save_locked_eq_config(&path, &config)?;
+        Ok(config.view(&model_id, notice))
+    })
+    .await
+}
+
+#[tauri::command]
+async fn save_eq_preset(
+    model_id: String,
+    preset_id: String,
+    gains: [i8; 10],
+) -> Result<EqConfigView, String> {
+    if !eq_config::is_preset_id(&preset_id) {
+        return Err(format!("unknown EQ preset: {preset_id}"));
+    }
+    if !valid_gains(&gains) {
+        return Err("EQ gains must be in -12..12".to_string());
+    }
+    let path = eq_config_path()?;
+    blocking(move || {
+        let (mut config, notice) = locked_eq_config(&path)?;
+        config.set_override(&model_id, &preset_id, gains);
+        save_locked_eq_config(&path, &config)?;
+        Ok(config.view(&model_id, notice))
+    })
+    .await
+}
+
+#[tauri::command]
+async fn clear_eq_preset(
+    model_id: String,
+    preset_id: String,
+    selected: bool,
+) -> Result<EqConfigView, String> {
+    if !eq_config::is_preset_id(&preset_id) {
+        return Err(format!("unknown EQ preset: {preset_id}"));
+    }
+    let path = eq_config_path()?;
+    blocking(move || {
+        let (mut config, notice) = locked_eq_config(&path)?;
+        config.clear_override(&model_id, &preset_id, selected);
+        save_locked_eq_config(&path, &config)?;
+        Ok(config.view(&model_id, notice))
+    })
+    .await
 }
 
 #[tauri::command]
@@ -297,6 +396,10 @@ pub fn run() {
             get_status,
             get_devices,
             get_device_summaries,
+            get_eq_config,
+            select_eq_preset,
+            save_eq_preset,
+            clear_eq_preset,
             set_active_device,
             get_eq_presets,
             set_sidetone,

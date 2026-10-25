@@ -10,6 +10,7 @@
 //! transport adapter; the CLI and Tauri are both thin callers here.
 
 mod audio_route;
+pub mod eq_config;
 
 pub use audio_route::{AudioEndpoint, AudioOutput};
 use sail_core::{

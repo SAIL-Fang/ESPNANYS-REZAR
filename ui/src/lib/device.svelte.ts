@@ -11,6 +11,7 @@ import type {
   DeviceSnapshot,
   DeviceSummary,
   EqPreset,
+  EqPresetConfig,
   ModelDescriptor,
   ThxSnapshot
 } from "./types";
@@ -41,6 +42,8 @@ export class DeviceStore {
   status = $state<DeviceSnapshot | null>(null);
   thx = $state<ThxSnapshot | null>(null);
   presets = $state<EqPreset[]>([]);
+  eqConfig = $state<EqPresetConfig | null>(null);
+  eqConfigNotice = $state("");
   summaries = $state<DeviceSummary[]>([]);
   devices = $state<ModelDescriptor[]>([]);
   activeModelId = $state("");
@@ -53,7 +56,7 @@ export class DeviceStore {
   verifyOutput = $state("");
   private refreshEpoch = 0;
   private pending = 0;
-  private defaultEqApplied = false;
+  private eqApplied = false;
   private normalizationApplied = false;
 
   get thxError(): string {
@@ -82,9 +85,48 @@ export class DeviceStore {
     }
   }
 
+  factoryGains(presetId: string): number[] {
+    const preset = this.presets.find((item) => item.id === presetId);
+    return preset ? [...preset.gains] : [...DEFAULT_EQ_GAINS];
+  }
+
+  effectiveGains(presetId: string): number[] {
+    const override = this.eqConfig?.presets[presetId];
+    if (Array.isArray(override) && override.length === 10) {
+      return [...override];
+    }
+    return this.factoryGains(presetId);
+  }
+
+  outputMatchesActive(): boolean {
+    const model = this.status?.model;
+    const name = this.status?.audioOutput.name?.toLowerCase() ?? "";
+    if (!model || !name) return false;
+    return model.capabilities.eqViaThx
+      ? name.includes("usb sound card")
+      : name.includes("blackshark");
+  }
+
+  async loadEqConfig() {
+    if (!this.activeModelId) {
+      this.eqConfig = null;
+      return;
+    }
+    try {
+      this.eqConfig = await api.getEqConfig(this.activeModelId);
+      this.eqConfigNotice = this.eqConfig.notice ?? "";
+      this.eqApplied = false;
+      if (this.eqConfig.notice) this.notice = this.eqConfig.notice;
+    } catch (error) {
+      this.eqConfig = null;
+      this.eqConfigNotice = "";
+      this.error = `无法读取 EQ 配置：${errorText(error)}`;
+    }
+  }
+
   private async applyDefaultEqOnce() {
-    if (this.defaultEqApplied || !this.status?.connected) return;
-    this.defaultEqApplied = true;
+    if (this.eqApplied || !this.status?.connected) return;
+    this.eqApplied = true;
     this.pending += 1;
     this.busy = true;
     try {
@@ -92,8 +134,38 @@ export class DeviceStore {
       this.notice = "默认 EQ 已写入";
     } catch (error) {
       // Allow the next reconnect/poll to retry after a transient failure.
-      this.defaultEqApplied = false;
+      this.eqApplied = false;
       this.error = `默认 EQ 写入失败：${errorText(error)}`;
+    } finally {
+      this.pending -= 1;
+      this.busy = this.pending > 0;
+    }
+  }
+
+  private async applyStoredEqOnce() {
+    if (this.eqApplied || !this.status?.connected) return;
+    if (!this.eqConfig) await this.loadEqConfig();
+    const selected = this.eqConfig?.selected;
+    if (!selected) {
+      await this.applyDefaultEqOnce();
+      return;
+    }
+    // THX applies to the current endpoint. Do not write a stored curve into
+    // the wrong device; the output gate will trigger a refresh after switching.
+    if (!this.outputMatchesActive()) return;
+    const preset = this.presets.find((item) => item.id === selected);
+    if (!preset) return;
+    const gains = this.effectiveGains(selected);
+    this.eqApplied = true;
+    this.pending += 1;
+    this.busy = true;
+    try {
+      await api.setEqPreset(selected);
+      await api.setEqGains(gains);
+      this.notice = `已恢复 ${preset.label} EQ`;
+    } catch (error) {
+      this.eqApplied = false;
+      this.error = `恢复 ${preset.label} EQ 失败：${errorText(error)}`;
     } finally {
       this.pending -= 1;
       this.busy = this.pending > 0;
@@ -183,8 +255,10 @@ export class DeviceStore {
     this.status = null;
     this.thx = null;
     this.presets = [];
-    this.defaultEqApplied = false;
+    this.eqConfig = null;
+    this.eqApplied = false;
     this.normalizationApplied = false;
+    await this.loadEqConfig();
   }
 
   outputEndpoint(): AudioEndpoint | null {
@@ -217,9 +291,7 @@ export class DeviceStore {
           this.status = status;
           this.statusError = "";
           if (!status.connected) {
-            this.defaultEqApplied = false;
-          } else {
-            void this.applyDefaultEqOnce();
+            this.eqApplied = false;
           }
         });
       } catch (error) {
@@ -269,6 +341,7 @@ export class DeviceStore {
           }
         });
       }
+      await this.applyStoredEqOnce();
     } finally {
       this.settle(epoch, () => (this.loading = false));
     }
@@ -299,6 +372,34 @@ export class DeviceStore {
 
   async setEqGains(gains: number[]) {
     return this.run(() => api.setEqGains([...gains]), "EQ 已写入");
+  }
+
+  private async configCommand(work: () => Promise<EqPresetConfig>): Promise<boolean> {
+    if (!this.activeModelId) return false;
+    try {
+      this.eqConfig = await work();
+      if (this.eqConfig.notice) this.notice = this.eqConfig.notice;
+      return true;
+    } catch (error) {
+      this.error = `保存 EQ 配置失败：${errorText(error)}`;
+      return false;
+    }
+  }
+
+  async selectEqPreset(presetId: string): Promise<boolean> {
+    return this.configCommand(() => api.selectEqPreset(this.activeModelId, presetId));
+  }
+
+  async saveEqPreset(presetId: string, gains: number[]): Promise<boolean> {
+    return this.configCommand(() =>
+      api.saveEqPreset(this.activeModelId, presetId, [...gains])
+    );
+  }
+
+  async clearEqPreset(presetId: string): Promise<boolean> {
+    return this.configCommand(() =>
+      api.clearEqPreset(this.activeModelId, presetId, true)
+    );
   }
 
   async saveNormalization(level: number) {
