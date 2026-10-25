@@ -40,6 +40,7 @@ custom [ 1, -5, -3, 0, 1, 1, 1, 1, 1, -3]  (S.A.I.L.)
 - `svelte-check`: 0 errors / 0 warnings.
 - `cargo test --workspace`: pass; `cargo check`/clippy pass.
 - Manual debug UI: both models appear; selecting USB Sound Card switches output and reaches THX ready; the 0529 game curve `[-3,-3,-4,0,5,5,4,1,0,-1]` was written and read back in the UI.
+- The 0529 microphone page selected `麦克风 (Razer USB Sound Card)` and exposed the THX capture controls; hardware sidetone is disabled because the model declares no sidetone.
 - THX `SetRenderEQGains` was called successfully on the real DLL for both container paths.
 
 ## Boundary

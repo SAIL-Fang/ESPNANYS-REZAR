@@ -701,17 +701,23 @@ impl ThxBridge {
     /// If Windows changed the default microphone, read/write the Razer mic
     /// explicitly instead of silently configuring another input.
     fn ensure_capture_device(&self) -> Result<(), ThxError> {
+        let usb_sound_card = std::env::var("SAIL_THX_MODEL")
+            .map(|model| model.contains("usb_sound_card"))
+            .unwrap_or(false);
+        let matches_model = |name: &str| {
+            let name = name.to_ascii_lowercase();
+            if usb_sound_card {
+                name.contains("razer") && name.contains("usb sound card")
+            } else {
+                name.contains("razer")
+                    && name.contains("blackshark")
+                    && !name.contains("usb sound card")
+            }
+        };
         let current = self
             .capture_device_json()?
             .and_then(|json| json_string(&json, "name"));
-        if current
-            .as_deref()
-            .map(|name| {
-                let name = name.to_ascii_lowercase();
-                name.contains("razer") && name.contains("blackshark")
-            })
-            .unwrap_or(false)
-        {
+        if current.as_deref().map(matches_model).unwrap_or(false) {
             return Ok(());
         }
         let Some(list) = self.capture_device_list_json()? else {
@@ -730,17 +736,14 @@ impl ThxBridge {
                 device
                     .get("name")
                     .and_then(|name| name.as_str())
-                    .map(|name| {
-                        let name = name.to_ascii_lowercase();
-                        name.contains("razer") && name.contains("blackshark")
-                    })
+                    .map(matches_model)
                     .unwrap_or(false)
             })
             .and_then(|device| device.get("id"))
             .and_then(|id| id.as_str());
         let Some(id) = id else {
             return Err(ThxError::Status(
-                "Razer BlackShark microphone is not listed by THX".into(),
+                "matching Razer microphone is not listed by THX".into(),
             ));
         };
         self.set_capture_device(id)?;

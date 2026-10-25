@@ -221,4 +221,5 @@ Seam：
 - 型号能力：`deriveUiState` 只在该型号声明 `capabilities.thx` 时报告 THX ready；presentation 对无 THX 型号显示「THX 不支持」；Sound/Mic panel 使用 descriptor 的 `eqBands`、`sidetoneMax` 和 capability。行为型 `HeadsetProfile` 仍推迟。
 - 第二型号已实测：`0529` 在设备选择器中出现，切换时自动把默认输出切到 USB Sound Card，THX 容器随之绑定，THX 就绪；电池/侧音显示「不支持」，不伪造。
 - 工厂预设已按型号分开：1390 game `[-7,-5,-3,-3,3,4,-2,-3,-3,-3]`，0529 game `[-3,-3,-4,0,5,5,4,1,0,-1]`；两者 custom 默认均为 `[1,-5,-3,0,1,1,1,1,1,-3]`。0529 的 game 已在 UI 实测写入。
-- 尚待完整硬件矩阵：1390 开机自动解锁、拔接收器、失焦后台不轮询；第二型号的麦克风页和重启恢复仍需人工验收。
+- 第二型号麦克风页已实测：THX capture 设备从 HyperSpeed 麦克风切到 `麦克风 (Razer USB Sound Card)`，麦克风音量/降噪/噪声门/标准化/EQ 可用；硬件侧音因能力缺失禁用。
+- 尚待完整硬件矩阵：1390 开机自动解锁、拔接收器、失焦后台不轮询；第二型号重启恢复仍需人工验收。
