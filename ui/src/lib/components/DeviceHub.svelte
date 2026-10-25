@@ -29,12 +29,16 @@
   }
 
   function subtitle(summary: DeviceSummary): string {
-    if (summary.model.capabilities.eqViaThx) {
+    return modelSubtitle(summary.model, summary.link);
+  }
+
+  function modelSubtitle(model: ModelDescriptor, link?: string): string {
+    if (model.capabilities.eqViaThx) {
       return "Razer USB Sound Card · 3.5mm";
     }
-    if (summary.link === "wireless") return "2.4 GHz 无线";
-    if (summary.link === "wired") return "USB 有线";
-    return "无线接收器";
+    if (link === "wireless") return "2.4 GHz 无线";
+    if (link === "wired") return "USB 有线";
+    return "无线耳机";
   }
 
   function stateText(summary: DeviceSummary): string {
@@ -65,17 +69,7 @@
     </button>
   </header>
 
-  {#if device.summaries.length === 0 && device.loading}
-    <section class="hub-empty">
-      <strong>正在读取设备…</strong>
-      <span>正在识别已连接的雷蛇耳机和输出状态。</span>
-    </section>
-  {:else if device.summaries.length === 0}
-    <section class="hub-empty">
-      <strong>未检测到受支持的雷蛇耳机</strong>
-      <span>请连接 BlackShark V2 HyperSpeed 接收器，或 Razer USB Sound Card。</span>
-    </section>
-  {:else}
+  {#if device.summaries.length > 0}
     <section class="hub-grid" aria-label="已连接设备">
       {#each device.summaries as summary (summary.model.id)}
         <button
@@ -122,6 +116,34 @@
           <span class="device-card-enter">进入设备 →</span>
         </button>
       {/each}
+    </section>
+  {:else if device.devices.length > 0 && device.loading}
+    <section class="hub-grid" aria-label="正在读取设备">
+      {#each device.devices as model (model.id)}
+        <div class="device-card loading-card" aria-busy="true">
+          <div class="device-card-top">
+            <div>
+              <h2>{title(model)}</h2>
+              <p>{modelSubtitle(model)}</p>
+            </div>
+          </div>
+          <div class="device-card-status">
+            <span class="dot"></span>
+            <strong>正在读取状态…</strong>
+          </div>
+          <span class="device-card-enter">请稍候</span>
+        </div>
+      {/each}
+    </section>
+  {:else if device.loading}
+    <section class="hub-empty">
+      <strong>正在扫描设备…</strong>
+      <span>正在识别已连接的雷蛇耳机和输出状态。</span>
+    </section>
+  {:else}
+    <section class="hub-empty">
+      <strong>未检测到受支持的雷蛇耳机</strong>
+      <span>请连接 BlackShark V2 HyperSpeed 接收器，或 Razer USB Sound Card。</span>
     </section>
   {/if}
 

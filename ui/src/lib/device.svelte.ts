@@ -112,9 +112,11 @@ export class DeviceStore {
   async loadHub() {
     this.loading = true;
     try {
-      const summaries = await api.getDeviceSummaries();
-      this.applySummaries(summaries);
-      if (!summaries.length) {
+      // The descriptor list is cheap; render the card shells while the
+      // per-device battery/route summary is still being collected.
+      const devices = await api.getDevices();
+      this.devices = devices;
+      if (!devices.length) {
         this.activeModelId = "";
         return;
       }
@@ -124,14 +126,17 @@ export class DeviceStore {
       } catch {
         // localStorage can be unavailable; fall back to the first model.
       }
-      const active =
-        summaries.find((summary) => summary.model.id === preferred) ?? summaries[0];
-      this.activeModelId = active.model.id;
-      await api.setActiveDevice(active.model.id);
+      const active = devices.find((model) => model.id === preferred) ?? devices[0];
+      this.activeModelId = active.id;
+      await api.setActiveDevice(active.id);
+      const summaries = await api.getDeviceSummaries();
+      if (!summaries.length) {
+        return;
+      }
       this.applySummaries(
         summaries.map((summary) => ({
           ...summary,
-          active: summary.model.id === active.model.id
+          active: summary.model.id === active.id
         }))
       );
     } catch (error) {

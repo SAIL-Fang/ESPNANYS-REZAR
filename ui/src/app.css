@@ -169,6 +169,8 @@ button:focus-visible, input:focus-visible {
   transition: border-color 140ms ease, transform 140ms ease, box-shadow 140ms ease;
 }
 .device-card:hover { border-color: var(--sail-faint); transform: translateY(-1px); }
+.device-card.loading-card { cursor: default; opacity: 0.72; }
+.device-card.loading-card:hover { border-color: var(--sail-line); transform: none; }
 .device-card.active { border-color: var(--sail-blue); box-shadow: 0 0 0 1px var(--sail-blue) inset; }
 .device-card-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
 .device-card h2 { margin: 0; color: var(--sail-ink); font-size: 18px; letter-spacing: -0.02em; }
