@@ -82,6 +82,8 @@ export function deriveUiState({ status, thx, loading }: UiStateInput): UiState {
 
   const wiredNotReady =
     status.link === "wired" &&
+    status.model.capabilities.battery &&
+    status.model.capabilities.charging &&
     (status.battery.state !== "known" || status.charging.state !== "known");
 
   if (!status.connected) {

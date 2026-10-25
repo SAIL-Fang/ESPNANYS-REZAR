@@ -14,8 +14,8 @@ use std::time::Duration;
 
 mod model;
 pub use model::{
-    model_for_product_id, unknown_model, ModelCapabilities, ModelDescriptor,
-    RAZER_BLACKSHARK_V2_HYPERSPEED, UNKNOWN_MODEL,
+    model_for_product_id, unknown_model, ModelCapabilities, ModelDescriptor, PID_USB_SOUND_CARD,
+    RAZER_BLACKSHARK_V2_HYPERSPEED, RAZER_BLACKSHARK_V2_USB_SOUND_CARD, UNKNOWN_MODEL,
 };
 
 pub const RAZER_VID: u16 = 0x1532;
@@ -76,6 +76,28 @@ fn select_device(
         (interface_rank, pid_rank)
     });
     candidates.into_iter().next()
+}
+
+pub fn list_models() -> Result<Vec<ModelDescriptor>, Error> {
+    let mut models = Vec::new();
+    for device in enumerate()? {
+        if let Some(model) = model_for_product_id(device.product_id) {
+            if !models
+                .iter()
+                .any(|known: &ModelDescriptor| known.id == model.id)
+            {
+                models.push(model.clone());
+            }
+        }
+    }
+    models.sort_by_key(|model| {
+        if model.id == RAZER_BLACKSHARK_V2_HYPERSPEED.id {
+            0
+        } else {
+            1
+        }
+    });
+    Ok(models)
 }
 
 impl HidTransport {

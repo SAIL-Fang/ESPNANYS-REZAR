@@ -215,8 +215,10 @@ Seam：
 - 单元测试：离线 HID 写和离线 THX 写都验证为“返回错误且 writer/THX 未被调用”；在线 HID 写只调用一次。
 - 已实测 CLI 在 `standby` 下执行 `sidetone on` 被拒绝，返回「耳机未开机，设置已锁定；请先打开耳机电源」。
 - 连接生命周期已集中到 `ui/src/lib/connection-lifecycle.ts`：一个 5 秒 tick，离线每 tick 重连，在线每 2 tick（10 秒）刷新状态；失焦/隐藏不调用 refresh；前台事件立即检查；HID 恢复后分两阶段刷新 HID/THX。
-- 生命周期测试 6 条，覆盖初始全量刷新、在线节流、离线两阶段恢复、失焦、busy 和 stop 清理；状态测试仍为 14 条。
+- 生命周期测试 6 条，覆盖初始全量刷新、在线节流、离线两阶段恢复、失焦、busy 和 stop 清理；状态测试 16 条。
 - 展示已集中到 `ui/src/lib/presentation.ts`：连接/传输标签、状态 badge、电量/充电、THX 标签、电源遮罩 copy、输出阻断 copy 和 route target 均由同一纯函数生成；`DevicePanel`、`StatusStrip`、`HeadsetPowerGate`、`AudioRouteGate` 和首页只渲染。
 - 展示测试 5 条，覆盖无线、关机、无接收器、输出错误和 THX capability。
 - 型号能力：`deriveUiState` 只在该型号声明 `capabilities.thx` 时报告 THX ready；presentation 对无 THX 型号显示「THX 不支持」；Sound/Mic panel 使用 descriptor 的 `eqBands`、`sidetoneMax` 和 capability。行为型 `HeadsetProfile` 仍推迟。
-- 尚待真实硬件验证：开机自动解锁、拔接收器、失焦后台不轮询；debug 稳定前不发布。
+- 第二型号已实测：`0529` 在设备选择器中出现，切换时自动把默认输出切到 USB Sound Card，THX 容器随之绑定，THX 就绪；电池/侧音显示「不支持」，不伪造。
+- 工厂预设已按型号分开：1390 game `[-7,-5,-3,-3,3,4,-2,-3,-3,-3]`，0529 game `[-3,-3,-4,0,5,5,4,1,0,-1]`；两者 custom 默认均为 `[1,-5,-3,0,1,1,1,1,1,-3]`。0529 的 game 已在 UI 实测写入。
+- 尚待完整硬件矩阵：1390 开机自动解锁、拔接收器、失焦后台不轮询；第二型号的麦克风页和重启恢复仍需人工验收。

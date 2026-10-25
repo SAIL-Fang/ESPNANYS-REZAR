@@ -153,14 +153,34 @@ pub struct SpeakerEqGains {
 
 impl Default for SpeakerEqGains {
     fn default() -> Self {
-        Self {
-            game: [1, -5, -3, 0, 1, 1, 1, 1, 1, -3],
-            music: [3, 3, 2, 0, 1, 1, 1, 1, 1, -3],
-            cinema: [4, 4, 3, -4, -6, -3, 1, 3, 1, -1],
-            custom: [3, 3, 2, 0, 1, 1, 1, 1, 1, -1],
-        }
+        HYPERSPEED_EQ_GAINS
     }
 }
+
+/// Razer Synapse factory defaults for the BlackShark V2 HyperSpeed (0565).
+pub const HYPERSPEED_EQ_GAINS: SpeakerEqGains = SpeakerEqGains {
+    game: [-7, -5, -3, -3, 3, 4, -2, -3, -3, -3],
+    music: [3, 3, 2, 0, 1, 1, 1, 1, 1, -3],
+    cinema: [4, 4, 3, -4, -6, -3, 1, 3, 1, -1],
+    custom: [1, -5, -3, 0, 1, 1, 1, 1, 1, -3],
+};
+
+/// Razer Synapse factory defaults for the BlackShark V2 through the Razer USB
+/// Sound Card (0529). The custom default is S.A.I.L.'s deliberate replacement
+/// for Razer's all-zero factory custom mode.
+pub const USB_SOUND_CARD_EQ_GAINS: SpeakerEqGains = SpeakerEqGains {
+    game: [-3, -3, -4, 0, 5, 5, 4, 1, 0, -1],
+    music: [2, 2, 1, 1, 2, 3, 3, 3, 1, 0],
+    cinema: [4, 4, 3, 0, -3, -1, 3, 5, 2, 1],
+    custom: [1, -5, -3, 0, 1, 1, 1, 1, 1, -3],
+};
+
+pub const ZERO_EQ_GAINS: SpeakerEqGains = SpeakerEqGains {
+    game: [0; 10],
+    music: [0; 10],
+    cinema: [0; 10],
+    custom: [0; 10],
+};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Error {
@@ -698,6 +718,32 @@ mod tests {
         assert_eq!(status.edition, Some(0));
         assert_eq!(status.firmware, "1.6.11.0");
         assert_eq!(status.serial, "HN0000000000000");
+    }
+
+    #[test]
+    fn factory_eq_defaults_match_razer_synapse() {
+        assert_eq!(
+            HYPERSPEED_EQ_GAINS.game,
+            [-7, -5, -3, -3, 3, 4, -2, -3, -3, -3]
+        );
+        assert_eq!(
+            HYPERSPEED_EQ_GAINS.custom,
+            [1, -5, -3, 0, 1, 1, 1, 1, 1, -3]
+        );
+        assert_eq!(
+            USB_SOUND_CARD_EQ_GAINS.game,
+            [-3, -3, -4, 0, 5, 5, 4, 1, 0, -1]
+        );
+        assert_eq!(
+            USB_SOUND_CARD_EQ_GAINS.music,
+            [2, 2, 1, 1, 2, 3, 3, 3, 1, 0]
+        );
+        assert_eq!(
+            USB_SOUND_CARD_EQ_GAINS.cinema,
+            [4, 4, 3, 0, -3, -1, 3, 5, 2, 1]
+        );
+        assert_eq!(USB_SOUND_CARD_EQ_GAINS.custom, HYPERSPEED_EQ_GAINS.custom);
+        assert_eq!(SpeakerEqGains::default().game, HYPERSPEED_EQ_GAINS.game);
     }
 
     #[test]

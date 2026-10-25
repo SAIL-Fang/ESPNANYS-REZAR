@@ -49,6 +49,7 @@ function status(overrides: Partial<DeviceSnapshot> = {}): DeviceSnapshot {
         autoPowerOff: true,
         dongleLed: true,
         speakerEq: true,
+        eqViaThx: false,
         sidetone: true,
         thx: true,
         micCapture: true
@@ -241,6 +242,40 @@ test("wired telemetry timeout is flagged, but the headset can still be ready", (
   });
   assert.equal(state.kind, "ready");
   assert.equal(state.wiredNotReady, true);
+});
+
+test("USB Sound Card has no wired telemetry warning", () => {
+  const base = status();
+  const usb = {
+    ...base,
+    model: {
+      ...base.model,
+      id: "razer.blackshark_v2_usb_sound_card",
+      displayName: "BlackShark V2 (USB Sound Card)",
+      wirelessPid: null,
+      wiredPid: 0x0529,
+      usagePage: 0xffa0,
+      sidetoneMax: null,
+      capabilities: {
+        ...base.model.capabilities,
+        battery: false,
+        charging: false,
+        firmware: false,
+        serial: false,
+        autoPowerOff: false,
+        dongleLed: false,
+        eqViaThx: true,
+        sidetone: false
+      }
+    },
+    link: "wired" as const,
+    battery: { state: "unsupported" as const },
+    charging: { state: "unsupported" as const }
+  };
+  const state = deriveUiState({ status: usb, thx: thx(), loading: false });
+  assert.equal(state.kind, "ready");
+  assert.equal(state.wiredNotReady, false);
+  assert.equal(state.powerBlocked, false);
 });
 
 test("reconnect only runs while blocked, visible, focused, and idle", () => {

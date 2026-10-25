@@ -159,14 +159,25 @@ fn discover_container(module: *mut c_void) -> Option<String> {
         let json = CStr::from_ptr(ptr).to_string_lossy();
         let value: serde_json::Value = serde_json::from_str(&json).ok()?;
         let devices = value.get("devices")?.as_array()?;
+        let model_hint = std::env::var("SAIL_THX_MODEL").unwrap_or_default();
+        let usb_sound_card = model_hint.contains("usb_sound_card");
         let score = |device: &&serde_json::Value| -> i32 {
             let Some(name) = device.get("name").and_then(|name| name.as_str()) else {
                 return 0;
             };
             let name = name.to_ascii_lowercase();
-            // Only the exact HyperSpeed family is accepted. A generic
-            // "BlackShark" entry could be a different headset/container.
-            if name.contains("blackshark v2 hyperspeed") || name.contains("blackshark v2 hs") {
+            if usb_sound_card {
+                // The analog BlackShark V2 reaches THX through the USB Sound
+                // Card container, not the HyperSpeed receiver.
+                if name.contains("usb sound card") {
+                    4
+                } else if name.contains("blackshark v2") && !name.contains("hyperspeed") {
+                    3
+                } else {
+                    0
+                }
+            } else if name.contains("blackshark v2 hyperspeed") || name.contains("blackshark v2 hs")
+            {
                 3
             } else {
                 0
@@ -371,6 +382,26 @@ impl ThxBridge {
         Err(ThxError::Status(
             "SetRenderSpatialProcessing returned false".into(),
         ))
+    }
+
+    /// Apply a full 10-band render curve through THX. The native export takes
+    /// a JSON array rather than a pointer/count pair; Razer's own wrapper uses
+    /// the same string form.
+    pub fn set_render_eq_gains(&self, gains: &[i8; 10]) -> Result<(), ThxError> {
+        let json = serde_json::to_string(gains)
+            .map_err(|error| ThxError::Status(format!("serialize EQ gains: {error}")))?;
+        let json = CString::new(json)
+            .map_err(|error| ThxError::Status(format!("EQ gains CString: {error}")))?;
+        let f: FnStr2 = unsafe { self.sym(b"SetRenderEQGains\0")? };
+        for attempt in 0..RETRIES {
+            if unsafe { f(self.container.as_ptr(), json.as_ptr()) } {
+                return Ok(());
+            }
+            if attempt + 1 < RETRIES {
+                std::thread::sleep(std::time::Duration::from_millis(RETRY_DELAY_MS));
+            }
+        }
+        Err(ThxError::Status("SetRenderEQGains returned false".into()))
     }
 
     // ------------------------------------------------------------------

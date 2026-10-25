@@ -12,7 +12,7 @@ export function formatEqBands(bands: number[] | undefined): string[] {
   return bands.map((hz) => (hz >= 1000 ? `${hz / 1000}k` : `${hz}`));
 }
 
-/** Razer's observed default 10-band curve, used for startup and Reset. */
+/** S.A.I.L.'s custom default; Razer's factory custom mode is all zeroes. */
 export const DEFAULT_EQ_GAINS = [1, -5, -3, 0, 1, 1, 1, 1, 1, -3];
 
 /** Preferred default for the speaker THX DRC level. Synapse's UI starts at 10;

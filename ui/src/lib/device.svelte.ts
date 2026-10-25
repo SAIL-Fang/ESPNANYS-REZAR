@@ -6,9 +6,16 @@
  */
 import { api } from "./api";
 import { DEFAULT_EQ_GAINS, DEFAULT_NORMALIZATION_LEVEL } from "./presets";
-import type { DeviceSnapshot, EqPreset, ThxSnapshot } from "./types";
+import type {
+  AudioEndpoint,
+  DeviceSnapshot,
+  EqPreset,
+  ModelDescriptor,
+  ThxSnapshot
+} from "./types";
 
 const NORMALIZATION_KEY = "sail.normalizationLevel";
+const ACTIVE_MODEL_KEY = "sail.activeModel";
 
 // Debug-only probe: lets the focus/foreground test prove that no HID refresh
 // is attempted while the app is unfocused. Vite folds this out of release.
@@ -33,6 +40,8 @@ export class DeviceStore {
   status = $state<DeviceSnapshot | null>(null);
   thx = $state<ThxSnapshot | null>(null);
   presets = $state<EqPreset[]>([]);
+  devices = $state<ModelDescriptor[]>([]);
+  activeModelId = $state("");
   loading = $state(true);
   busy = $state(false);
   error = $state("");
@@ -91,6 +100,78 @@ export class DeviceStore {
 
   private settle(epoch: number, apply: () => void) {
     if (epoch === this.refreshEpoch) apply();
+  }
+
+  private endpointFor(model: ModelDescriptor, status: DeviceSnapshot | null): AudioEndpoint | null {
+    const endpoints = status?.audioOutput.endpoints ?? [];
+    const needle = model.capabilities.eqViaThx ? "usb sound card" : "blackshark";
+    return (
+      endpoints.find((endpoint) => endpoint.name.toLowerCase().includes(needle)) ?? null
+    );
+  }
+
+  private async ensureOutput(model: ModelDescriptor, status: DeviceSnapshot | null) {
+    const endpoint = this.endpointFor(model, status);
+    if (!endpoint || endpoint.isDefault) return;
+    try {
+      await api.setDefaultAudioOutput(endpoint.id);
+    } catch {
+      // The route gate still surfaces this; selection must not fail hard.
+    }
+  }
+
+  async loadDevices() {
+    try {
+      const devices = await api.getDevices();
+      this.devices = devices;
+      if (!devices.length) {
+        await this.refresh(false, true);
+        return;
+      }
+      let preferred = "";
+      try {
+        preferred = localStorage.getItem(ACTIVE_MODEL_KEY) ?? "";
+      } catch {
+        // localStorage can be unavailable; fall back to the first model.
+      }
+      let status: DeviceSnapshot | null = null;
+      try {
+        status = await api.getStatus();
+      } catch {
+        // The first refresh will surface the real error.
+      }
+      const query = (status?.audioOutput.name ?? "").toLowerCase();
+      const fromOutput = devices.find((model) => {
+        if (model.capabilities.eqViaThx) return query.includes("usb sound card");
+        return query.includes("hyperspeed") || query.includes("2.4");
+      });
+      const active = devices.find((model) => model.id === preferred) ?? fromOutput ?? devices[0];
+      this.activeModelId = active.id;
+      await api.setActiveDevice(active.id);
+      await this.ensureOutput(active, status);
+    } catch (error) {
+      this.error = `无法读取设备列表：${errorText(error)}`;
+    }
+    await this.refresh(false, true);
+  }
+
+  async selectDevice(modelId: string) {
+    if (!modelId || modelId === this.activeModelId) return;
+    const model = this.devices.find((item) => item.id === modelId);
+    await api.setActiveDevice(modelId);
+    this.activeModelId = modelId;
+    try {
+      localStorage.setItem(ACTIVE_MODEL_KEY, modelId);
+    } catch {
+      // Remembering the selection is best-effort.
+    }
+    if (model) await this.ensureOutput(model, this.status);
+    this.status = null;
+    this.thx = null;
+    this.presets = [];
+    this.defaultEqApplied = false;
+    this.normalizationApplied = false;
+    await this.refresh(false, true);
   }
 
   async refresh(silent = false, includeThx = true) {

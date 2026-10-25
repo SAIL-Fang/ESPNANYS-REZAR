@@ -16,6 +16,7 @@ tauri-build = { version = "2", features = [] }
 tauri = { version = "2", features = ["tray-icon"] }
 serde = { version = "1", features = ["derive"] }
 sail_app = { path = "../../sail_app" }
+sail_hid = { path = "../../sail_hid" }
 
 [profile.release]
 codegen-units = 1

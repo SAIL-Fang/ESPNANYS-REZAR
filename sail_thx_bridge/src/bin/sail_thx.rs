@@ -106,6 +106,18 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                 println!("{}", bridge.get_level()?);
             }
         },
+        "render-eq" => {
+            let raw = args.get(1).ok_or("render-eq needs a JSON array")?;
+            let values: Vec<i8> = serde_json::from_str(raw)?;
+            if values.len() != 10 {
+                return Err("render-eq needs 10 dB values".into());
+            }
+            let gains: [i8; 10] = values
+                .try_into()
+                .map_err(|_| "render-eq needs 10 dB values")?;
+            bridge.set_render_eq_gains(&gains)?;
+            println!("render-eq {}", serde_json::to_string(&gains)?);
+        }
         "spatial" => match args.get(1) {
             Some(value) => {
                 let enabled = match value.as_str() {

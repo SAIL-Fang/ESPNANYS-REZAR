@@ -2547,6 +2547,7 @@ name = "sail_ui"
 version = "0.1.0"
 dependencies = [
  "sail_app",
+ "sail_hid",
  "serde",
  "tauri",
  "tauri-build",

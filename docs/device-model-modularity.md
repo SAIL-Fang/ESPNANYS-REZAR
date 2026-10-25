@@ -1,6 +1,6 @@
 # 多型号耳机抽象设计
 
-> 状态：Draft 1。当前只支持 Razer BlackShark V2 HyperSpeed；本文定义后续适配其它型号时的 seam，不改变现有行为。
+> 状态：Draft 2。已支持 Razer BlackShark V2 HyperSpeed（0565/056E）和 BlackShark V2 + Razer USB Sound Card（0529）。
 > 目标：把“协议/传输”和“型号能力”分开，避免 UI、THX、EQ 和 Razer 常量继续耦在一起。
 
 ## 0. 当前耦合点
@@ -156,6 +156,7 @@ sail_app::profiles::all() -> &'static [&'static dyn ProfileFactory]
   - `model_for_product_id`
 - HID selector 改为通过 descriptor 匹配 VID/PID/usage/interface，不再直接读 Razer 常量。
 - `DeviceSnapshot.model` 已加入；CLI 输出 model，UI 侧栏使用 `model.displayName`，不再写死 “BlackShark V2 HS”。
-- 尚未落地：`HeadsetProfile` trait、按型号命令映射、THX `ThxProfile`、UI capability 驱动。
+- 尚未落地：行为型 `HeadsetProfile` trait；当前用 data descriptor + capability branch 实现两个真实 adapter。
 - 第二步已落地：`sidetone_max` 进入 descriptor；`deriveUiState` 读取 `capabilities.thx`；presentation 输出 `THX 不支持`；Sound/Mic panel 读取 `eqBands`、`sidetoneMax` 和 capability；UI 不再固定 0–15 或 10 段文案。
+- 第二个型号已落地：`0529` descriptor（`FFA0`、无电池/侧音、THX EQ）、model-specific preset、设备选择器、默认输出切换、THX `SetRenderEQGains` 与容器 hint；详见 ADR-0006。
 - 仍明确推迟：行为型 `HeadsetProfile` trait、按型号命令映射、THX profile；见 `docs/adr/0004-model-descriptor-scope.md`。

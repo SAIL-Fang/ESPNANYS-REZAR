@@ -52,19 +52,22 @@
   let pageLocked = $derived(!uiState.canWrite);
 
   onMount(() => {
-    const lifecycle = new ConnectionLifecycle({
-      scheduler: browserScheduler,
-      foreground: browserForeground,
-      events: browserForegroundEvents,
-      ports: {
-        hasSnapshot: () => !!device.status || !!device.thx,
-        isOffline: () => !device.status || !device.status.connected,
-        busy: () => device.busy,
-        refresh: (silent, includeThx) => device.refresh(silent, includeThx)
-      }
+    let lifecycle: ConnectionLifecycle | null = null;
+    void device.loadDevices().then(() => {
+      lifecycle = new ConnectionLifecycle({
+        scheduler: browserScheduler,
+        foreground: browserForeground,
+        events: browserForegroundEvents,
+        ports: {
+          hasSnapshot: () => !!device.status || !!device.thx,
+          isOffline: () => !device.status || !device.status.connected,
+          busy: () => device.busy,
+          refresh: (silent, includeThx) => device.refresh(silent, includeThx)
+        }
+      });
+      lifecycle.start();
     });
-    lifecycle.start();
-    return () => lifecycle.stop();
+    return () => lifecycle?.stop();
   });
 </script>
 
@@ -100,6 +103,19 @@
       <div class="side-device-meta">
         {presentation.transportLabel} · <span class="mono">{presentation.batteryText}</span> · {presentation.chargeText}
       </div>
+      {#if device.devices.length > 1}
+        <label class="device-picker">
+          <span>控制设备</span>
+          <select
+            value={device.activeModelId}
+            onchange={(event) => void device.selectDevice(event.currentTarget.value)}
+          >
+            {#each device.devices as model}
+              <option value={model.id}>{model.displayName}</option>
+            {/each}
+          </select>
+        </label>
+      {/if}
     </div>
   </aside>
 
@@ -118,17 +134,19 @@
         <div class="inline-status error">{device.statusError || device.error}</div>
       {/if}
 
-      {#if tab === "device"}
-        <DevicePanel />
-      {:else if tab === "sound"}
-        <SoundPanel />
-      {:else if tab === "demo"}
-        <DemoPanel />
-      {:else if tab === "mic"}
-        <MicPanel />
-      {:else}
-        <SettingsPanel />
-      {/if}
+      {#key device.status?.model.id ?? "none"}
+        {#if tab === "device"}
+          <DevicePanel />
+        {:else if tab === "sound"}
+          <SoundPanel />
+        {:else if tab === "demo"}
+          <DemoPanel />
+        {:else if tab === "mic"}
+          <MicPanel />
+        {:else}
+          <SettingsPanel />
+        {/if}
+      {/key}
     </div>
   </main>
 </div>

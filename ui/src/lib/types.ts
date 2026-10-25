@@ -27,6 +27,7 @@ export type ModelCapabilities = {
   autoPowerOff: boolean;
   dongleLed: boolean;
   speakerEq: boolean;
+  eqViaThx: boolean;
   sidetone: boolean;
   thx: boolean;
   micCapture: boolean;

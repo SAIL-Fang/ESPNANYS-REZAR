@@ -139,7 +139,7 @@ mod windows_impl {
             endpoints.push(AudioEndpoint {
                 id: id.clone(),
                 name,
-                is_headset: lower.contains("blackshark"),
+                is_headset: lower.contains("blackshark") || lower.contains("razer usb sound card"),
                 is_default: default_id.as_deref() == Some(id.as_str()),
             });
         }

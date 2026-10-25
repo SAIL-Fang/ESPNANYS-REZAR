@@ -39,7 +39,7 @@ fn run(mut args: Vec<String>) -> Result<(), Box<dyn std::error::Error>> {
                     info.usage,
                     info.interface_number,
                     info.product.as_deref().unwrap_or("(no product string)"),
-                    if info.usage_page == 0xFF14 && info.usage == 1 {
+                    if (info.usage_page == 0xFF14 || info.usage_page == 0xFFA0) && info.usage == 1 {
                         "  [vendor control]"
                     } else {
                         ""
@@ -211,7 +211,7 @@ fn print_help() {
         r#"sail_cli — SAIL headset control
 
 Usage:
-  sail_cli [--pid 0x0565|0x056E] <command>
+  sail_cli [--pid 0x0565|0x056E|0x0529] <command>
 
 Commands:
   list                       enumerate Razer HID interfaces

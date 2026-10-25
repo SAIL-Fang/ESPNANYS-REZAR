@@ -18,6 +18,8 @@ pub struct ModelCapabilities {
     pub auto_power_off: bool,
     pub dongle_led: bool,
     pub speaker_eq: bool,
+    /// Render EQ is applied by THX rather than the headset HID channel.
+    pub eq_via_thx: bool,
     pub sidetone: bool,
     pub thx: bool,
     pub mic_capture: bool,
@@ -58,7 +60,38 @@ pub static RAZER_BLACKSHARK_V2_HYPERSPEED: ModelDescriptor = ModelDescriptor {
         auto_power_off: true,
         dongle_led: true,
         speaker_eq: true,
+        eq_via_thx: false,
         sidetone: true,
+        thx: true,
+        mic_capture: true,
+    },
+};
+
+/// The analog BlackShark V2 reaches Windows through the Razer USB Sound Card.
+/// There is no headset battery or `FF14` control channel on this path.
+pub const PID_USB_SOUND_CARD: u16 = 0x0529;
+
+pub static RAZER_BLACKSHARK_V2_USB_SOUND_CARD: ModelDescriptor = ModelDescriptor {
+    id: "razer.blackshark_v2_usb_sound_card",
+    display_name: "BlackShark V2 (USB Sound Card)",
+    vendor_id: RAZER_VID,
+    wireless_pid: None,
+    wired_pid: Some(PID_USB_SOUND_CARD),
+    usage_page: 0xFFA0,
+    usage: 1,
+    interface_number: 3,
+    eq_bands: &[31, 63, 125, 250, 500, 1_000, 2_000, 4_000, 8_000, 16_000],
+    sidetone_max: None,
+    capabilities: ModelCapabilities {
+        battery: false,
+        charging: false,
+        firmware: false,
+        serial: false,
+        auto_power_off: false,
+        dongle_led: false,
+        speaker_eq: true,
+        eq_via_thx: true,
+        sidetone: false,
         thx: true,
         mic_capture: true,
     },
@@ -83,6 +116,7 @@ pub static UNKNOWN_MODEL: ModelDescriptor = ModelDescriptor {
         auto_power_off: false,
         dongle_led: false,
         speaker_eq: false,
+        eq_via_thx: false,
         sidetone: false,
         thx: false,
         mic_capture: false,
@@ -92,7 +126,9 @@ pub static UNKNOWN_MODEL: ModelDescriptor = ModelDescriptor {
 /// Resolve a product ID to its model descriptor. Unknown PIDs are never
 /// guessed into a supported model.
 pub fn model_for_product_id(product_id: u16) -> Option<&'static ModelDescriptor> {
-    if RAZER_BLACKSHARK_V2_HYPERSPEED.wireless_pid == Some(product_id)
+    if RAZER_BLACKSHARK_V2_USB_SOUND_CARD.wired_pid == Some(product_id) {
+        Some(&RAZER_BLACKSHARK_V2_USB_SOUND_CARD)
+    } else if RAZER_BLACKSHARK_V2_HYPERSPEED.wireless_pid == Some(product_id)
         || RAZER_BLACKSHARK_V2_HYPERSPEED.wired_pid == Some(product_id)
     {
         Some(&RAZER_BLACKSHARK_V2_HYPERSPEED)
@@ -117,6 +153,16 @@ mod tests {
         assert_eq!(wired.id, RAZER_BLACKSHARK_V2_HYPERSPEED.id);
         assert_eq!(wireless.eq_bands.len(), 10);
         assert_eq!(wireless.sidetone_max, Some(15));
+    }
+
+    #[test]
+    fn usb_sound_card_pid_maps_to_the_analog_profile() {
+        let model = model_for_product_id(PID_USB_SOUND_CARD).expect("usb sound card model");
+        assert_eq!(model.id, RAZER_BLACKSHARK_V2_USB_SOUND_CARD.id);
+        assert_eq!(model.usage_page, 0xFFA0);
+        assert!(!model.capabilities.battery);
+        assert!(!model.capabilities.sidetone);
+        assert!(model.capabilities.eq_via_thx);
     }
 
     #[test]

@@ -2,7 +2,8 @@
 // Author: SAIL
 // Copyright (c) 2026 SAIL
 // SPDX-License-Identifier: MIT
-use sail_app::{DeviceSnapshot, EqPreset, SailApp, ThxSnapshot};
+use sail_app::{set_active_pid, DeviceSnapshot, EqPreset, SailApp, ThxSnapshot};
+use sail_hid::{list_models, model_for_product_id, ModelDescriptor};
 use std::fs;
 use std::path::PathBuf;
 use std::process::Command as ProcessCommand;
@@ -79,6 +80,28 @@ where
 #[tauri::command]
 async fn get_status() -> Result<DeviceSnapshot, String> {
     blocking(|| Ok(app().snapshot())).await
+}
+
+#[tauri::command]
+async fn get_devices() -> Result<Vec<ModelDescriptor>, String> {
+    blocking(|| list_models().map_err(|error| error.to_string())).await
+}
+
+#[tauri::command]
+async fn set_active_device(model_id: String) -> Result<(), String> {
+    let model = list_models()
+        .map_err(|error| error.to_string())?
+        .into_iter()
+        .find(|model| model.id == model_id)
+        .ok_or_else(|| format!("device not present: {model_id}"))?;
+    let pid = model.wireless_pid.or(model.wired_pid).ok_or_else(|| {
+        format!("device has no transport PID: {}", model.id)
+    })?;
+    if model_for_product_id(pid).is_none() {
+        return Err(format!("unsupported PID 0x{pid:04X}"));
+    }
+    set_active_pid(Some(pid));
+    Ok(())
 }
 
 #[tauri::command]
@@ -267,6 +290,8 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             get_status,
+            get_devices,
+            set_active_device,
             get_eq_presets,
             set_sidetone,
             set_sidetone_volume,

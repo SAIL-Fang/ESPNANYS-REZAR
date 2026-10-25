@@ -50,6 +50,7 @@ function status(overrides: Partial<DeviceSnapshot> = {}): DeviceSnapshot {
         autoPowerOff: true,
         dongleLed: true,
         speakerEq: true,
+        eqViaThx: false,
         sidetone: true,
         thx: true,
         micCapture: true

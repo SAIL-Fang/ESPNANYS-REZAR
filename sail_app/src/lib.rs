@@ -14,10 +14,11 @@ mod audio_route;
 pub use audio_route::{AudioEndpoint, AudioOutput};
 use sail_core::{
     parse_event, Command, Error as CoreError, Event, SailDevice, SpeakerEqPreset, Transport,
-    FRAME_LEN,
+    FRAME_LEN, HYPERSPEED_EQ_GAINS, USB_SOUND_CARD_EQ_GAINS,
 };
 use sail_hid::{
-    model_for_product_id, HidDevice, HidTransport, ModelDescriptor, PID_WIRED, PID_WIRELESS,
+    model_for_product_id, HidDevice, HidTransport, ModelDescriptor, PID_USB_SOUND_CARD, PID_WIRED,
+    PID_WIRELESS,
 };
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -267,8 +268,12 @@ pub struct EqPreset {
 
 /// The UI reads the default gains from here instead of keeping a second copy
 /// in TypeScript. Labels live here for now; a future i18n layer can move them.
-pub fn eq_presets() -> Vec<EqPreset> {
-    let gains = sail_core::SpeakerEqGains::default();
+pub fn eq_presets(model: &ModelDescriptor) -> Vec<EqPreset> {
+    let gains = if model.capabilities.eq_via_thx {
+        USB_SOUND_CARD_EQ_GAINS
+    } else {
+        HYPERSPEED_EQ_GAINS
+    };
     vec![
         EqPreset {
             id: "game",
@@ -382,6 +387,7 @@ pub trait ThxHost {
     fn set_level(&self, level: i32) -> Result<(), String>;
     fn set_enabled(&self, enabled: bool) -> Result<(), String>;
     fn set_spatial(&self, enabled: bool) -> Result<(), String>;
+    fn set_render_eq_gains(&self, gains: &[i8; 10]) -> Result<(), String>;
     fn mic(&self, args: &[String]) -> Result<(), String>;
     fn start_preview(&self) -> Result<(), String>;
     fn verify(&self) -> Result<String, String>;
@@ -389,6 +395,7 @@ pub trait ThxHost {
 
 pub struct ProcessThxHost {
     helper: Option<PathBuf>,
+    model: Option<&'static str>,
 }
 
 impl Default for ProcessThxHost {
@@ -401,7 +408,26 @@ impl ProcessThxHost {
     pub fn new() -> Self {
         Self {
             helper: find_thx_helper(),
+            model: None,
         }
+    }
+
+    pub fn for_pid(pid: Option<u16>) -> Self {
+        Self {
+            helper: find_thx_helper(),
+            model: pid.and_then(model_for_product_id).map(|model| model.id),
+        }
+    }
+
+    fn command(&self, helper: &PathBuf) -> std::process::Command {
+        let mut command = command_for(helper);
+        if let Some(parent) = helper.parent() {
+            command.current_dir(parent);
+        }
+        if let Some(model) = self.model {
+            command.env("SAIL_THX_MODEL", model);
+        }
+        command
     }
 
     fn run(&self, args: &[&str]) -> Result<String, String> {
@@ -410,7 +436,8 @@ impl ProcessThxHost {
             .helper
             .as_ref()
             .ok_or_else(|| "THX helper not found; run scripts\\build.cmd -Stage".to_string())?;
-        let mut child = command_for(helper)
+        let mut child = self
+            .command(helper)
             .args(args)
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
@@ -491,6 +518,11 @@ impl ThxHost for ProcessThxHost {
             .map(|_| ())
     }
 
+    fn set_render_eq_gains(&self, gains: &[i8; 10]) -> Result<(), String> {
+        let json = serde_json::to_string(gains).map_err(|error| error.to_string())?;
+        self.run(&["render-eq", &json]).map(|_| ())
+    }
+
     fn mic(&self, args: &[String]) -> Result<(), String> {
         self.run_mic(args)
     }
@@ -503,7 +535,7 @@ impl ThxHost for ProcessThxHost {
         // Keep this process alive while THX's preview worker runs. An
         // ephemeral helper crashes in the DLL at exit (0xC0000005) right after
         // SetCapturePreview(true), even though the preview itself started.
-        command_for(helper)
+        self.command(helper)
             .args(["mic-preview-hold"])
             .stdin(Stdio::null())
             .stdout(Stdio::null())
@@ -559,6 +591,23 @@ fn find_thx_helper() -> Option<PathBuf> {
 pub struct SailApp {
     thx: Box<dyn ThxHost>,
     hid: Box<dyn HidAccess>,
+    pid: Option<u16>,
+}
+
+static ACTIVE_PID: OnceLock<Mutex<Option<u16>>> = OnceLock::new();
+
+fn active_pid_slot() -> &'static Mutex<Option<u16>> {
+    ACTIVE_PID.get_or_init(|| Mutex::new(None))
+}
+
+pub fn set_active_pid(pid: Option<u16>) {
+    if let Ok(mut slot) = active_pid_slot().lock() {
+        *slot = pid;
+    }
+}
+
+pub fn active_pid() -> Option<u16> {
+    active_pid_slot().lock().ok().and_then(|slot| *slot)
 }
 
 impl Default for SailApp {
@@ -569,7 +618,7 @@ impl Default for SailApp {
 
 impl SailApp {
     pub fn new() -> Self {
-        Self::with_pid(None)
+        Self::with_pid(active_pid())
     }
 
     /// Same public write surface, but binds the gate to a caller-selected PID.
@@ -577,8 +626,9 @@ impl SailApp {
     /// default selector.
     pub fn with_pid(pid: Option<u16>) -> Self {
         Self {
-            thx: Box::new(ProcessThxHost::new()),
+            thx: Box::new(ProcessThxHost::for_pid(pid)),
             hid: Box::new(RealHidAccess { pid }),
+            pid,
         }
     }
 
@@ -586,25 +636,37 @@ impl SailApp {
         Self {
             thx: host,
             hid: Box::new(RealHidAccess { pid: None }),
+            pid: None,
         }
     }
 
     #[cfg(test)]
     fn with_parts(hid: Box<dyn HidAccess>, thx: Box<dyn ThxHost>) -> Self {
-        Self { thx, hid }
+        Self {
+            thx,
+            hid,
+            pid: None,
+        }
+    }
+
+    fn model(&self) -> Option<&'static ModelDescriptor> {
+        match self.pid {
+            Some(pid) => model_for_product_id(pid),
+            None => model_for_product_id(PID_WIRELESS),
+        }
     }
 
     /// Read every field independently. A single timeout or unsupported command
     /// does not discard the fields that did respond.
     pub fn snapshot(&self) -> DeviceSnapshot {
         let _guard = hid_lock();
-        let transport = match HidTransport::open(None) {
+        let transport = match HidTransport::open(self.pid) {
             Ok(transport) => transport,
             Err(error) => return DeviceSnapshot::disconnected(error.to_string()),
         };
         let link = match transport.info().product_id {
             PID_WIRELESS => Link::Wireless,
-            PID_WIRED => Link::Wired,
+            PID_WIRED | PID_USB_SOUND_CARD => Link::Wired,
             _ => Link::Unknown,
         };
         let model = sail_hid::model_for_product_id(transport.info().product_id)
@@ -614,23 +676,29 @@ impl SailApp {
         // the last asynchronous event in feature report 2. Read it before any
         // command can overwrite that cache. Wireless uses the active GET path;
         // skipping the feature read there also avoids its unbounded hidapi call.
-        let cached_event = if link == Link::Wired {
-            cached_event(&transport)
-        } else {
-            None
-        };
+        let cached_event =
+            if link == Link::Wired && transport.info().product_id != PID_USB_SOUND_CARD {
+                cached_event(&transport)
+            } else {
+                None
+            };
         let mut device = SailDevice::new(transport).with_timeout(Duration::from_millis(500));
         if link == Link::Wired {
             device = device.with_get_flags(0x00);
         }
+        let capabilities = model.capabilities;
         let mut issues = Vec::new();
-        let mut battery = read_u8(&mut device, Command::Battery, &mut issues);
+        let mut battery = if capabilities.battery {
+            read_u8(&mut device, Command::Battery, &mut issues)
+        } else {
+            Field::Unsupported
+        };
         // Wireless handshake: the receiver opens even when the headset is off.
         // Battery/charging are headset-side commands, so if both time out the
         // headset is not powered on. Stop after two short probes instead of
         // waiting for every unrelated command to time out.
         let mut charging_probe = None;
-        if link == Link::Wireless && !battery.is_known() {
+        if link == Link::Wireless && capabilities.battery && !battery.is_known() {
             let charging = read_bool(&mut device, Command::Charging, &mut issues);
             if !charging.is_known() {
                 issues.push("headset handshake: battery/charging timed out".into());
@@ -644,9 +712,13 @@ impl SailApp {
             }
             charging_probe = Some(charging);
         }
-        let mut charging = match charging_probe {
-            Some(charging) => charging,
-            None => read_bool(&mut device, Command::Charging, &mut issues),
+        let mut charging = if capabilities.charging {
+            match charging_probe {
+                Some(charging) => charging,
+                None => read_bool(&mut device, Command::Charging, &mut issues),
+            }
+        } else {
+            Field::Unsupported
         };
         if let Some(event) = cached_event {
             apply_event(&event, &mut battery, &mut charging);
@@ -664,12 +736,36 @@ impl SailApp {
                 }
             }
         }
-        let firmware = read_string(&mut device, Command::Firmware, &mut issues);
-        let serial = read_serial(&mut device, &mut issues);
-        let auto_power_off_min = read_u8(&mut device, Command::AutoPowerOff, &mut issues);
-        let dongle_led = read_u8(&mut device, Command::DongleLed, &mut issues);
-        let speaker_preset_eq = read_u8(&mut device, Command::SpeakerPresetEq, &mut issues);
-        let edition = read_u8(&mut device, Command::Edition, &mut issues);
+        let firmware = if capabilities.firmware {
+            read_string(&mut device, Command::Firmware, &mut issues)
+        } else {
+            Field::Unsupported
+        };
+        let serial = if capabilities.serial {
+            read_serial(&mut device, &mut issues)
+        } else {
+            Field::Unsupported
+        };
+        let auto_power_off_min = if capabilities.auto_power_off {
+            read_u8(&mut device, Command::AutoPowerOff, &mut issues)
+        } else {
+            Field::Unsupported
+        };
+        let dongle_led = if capabilities.dongle_led {
+            read_u8(&mut device, Command::DongleLed, &mut issues)
+        } else {
+            Field::Unsupported
+        };
+        let speaker_preset_eq = if capabilities.speaker_eq && !capabilities.eq_via_thx {
+            read_u8(&mut device, Command::SpeakerPresetEq, &mut issues)
+        } else {
+            Field::Unsupported
+        };
+        let edition = if capabilities.firmware {
+            read_u8(&mut device, Command::Edition, &mut issues)
+        } else {
+            Field::Unsupported
+        };
 
         DeviceSnapshot {
             connected: true,
@@ -711,15 +807,28 @@ impl SailApp {
     }
 
     pub fn eq_presets(&self) -> Vec<EqPreset> {
-        eq_presets()
+        eq_presets(
+            self.model()
+                .unwrap_or_else(|| model_for_product_id(PID_WIRELESS).expect("known model")),
+        )
     }
 
     pub fn set_sidetone(&self, enabled: bool) -> Result<(), SailError> {
+        if self.model().map(|model| !model.capabilities.sidetone) == Some(true) {
+            return Err(SailError::Invalid(
+                "sidetone is unavailable on this model".into(),
+            ));
+        }
         self.hid
             .write_online(&mut |device| device.set_sidetone(enabled).map_err(SailError::Device))
     }
 
     pub fn set_sidetone_volume(&self, value: u8) -> Result<(), SailError> {
+        if self.model().map(|model| !model.capabilities.sidetone) == Some(true) {
+            return Err(SailError::Invalid(
+                "sidetone is unavailable on this model".into(),
+            ));
+        }
         if value > 15 {
             return Err(SailError::Invalid("sidetone-volume is 0..15".into()));
         }
@@ -731,6 +840,11 @@ impl SailApp {
     pub fn set_eq_preset(&self, preset: &str) -> Result<(), SailError> {
         let preset = SpeakerEqPreset::from_name(preset)
             .ok_or_else(|| SailError::Invalid(format!("unknown EQ preset: {preset}")))?;
+        if self.model().map(|model| model.capabilities.eq_via_thx) == Some(true) {
+            // The THX path applies the curve through `set_eq_gains`; there is
+            // no headset preset index to persist.
+            return Ok(());
+        }
         self.hid.write_online(&mut |device| {
             device
                 .set_speaker_eq_preset(preset)
@@ -741,6 +855,10 @@ impl SailApp {
     pub fn set_eq_gains(&self, gains: [i8; 10]) -> Result<(), SailError> {
         if gains.iter().any(|gain| !(-12..=12).contains(gain)) {
             return Err(SailError::Invalid("EQ gains must be -12..12".into()));
+        }
+        if self.model().map(|model| model.capabilities.eq_via_thx) == Some(true) {
+            self.require_online()?;
+            return self.thx.set_render_eq_gains(&gains).map_err(SailError::Thx);
         }
         self.hid.write_online(&mut |device| {
             device
@@ -895,6 +1013,20 @@ fn read_serial<T: Transport>(
 mod tests {
     use super::*;
 
+    #[test]
+    fn eq_presets_are_model_specific() {
+        let hyper = eq_presets(&sail_hid::RAZER_BLACKSHARK_V2_HYPERSPEED);
+        let usb = eq_presets(&sail_hid::RAZER_BLACKSHARK_V2_USB_SOUND_CARD);
+        let hyper_game = hyper.iter().find(|preset| preset.id == "game").unwrap();
+        let usb_game = usb.iter().find(|preset| preset.id == "game").unwrap();
+        assert_eq!(hyper_game.gains, [-7, -5, -3, -3, 3, 4, -2, -3, -3, -3]);
+        assert_eq!(usb_game.gains, [-3, -3, -4, 0, 5, 5, 4, 1, 0, -1]);
+        for presets in [&hyper, &usb] {
+            let custom = presets.iter().find(|preset| preset.id == "custom").unwrap();
+            assert_eq!(custom.gains, [1, -5, -3, 0, 1, 1, 1, 1, 1, -3]);
+        }
+    }
+
     struct FakeThx {
         status: ThxSnapshot,
     }
@@ -910,6 +1042,9 @@ mod tests {
             Ok(())
         }
         fn set_spatial(&self, _enabled: bool) -> Result<(), String> {
+            Ok(())
+        }
+        fn set_render_eq_gains(&self, _gains: &[i8; 10]) -> Result<(), String> {
             Ok(())
         }
         fn mic(&self, _args: &[String]) -> Result<(), String> {

@@ -67,6 +67,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\razer-update-core.ps1 -Status
 - 设备：**Razer BlackShark V2 HyperSpeed**（Windows 显示为 *Razer BlackShark V2 HS 2.4*，中文 *旋风黑鲨 V2 极速版*）
 - 无线接收器：`VID 0x1532 / PID 0x0565`
 - 有线 USB：`VID 0x1532 / PID 0x056E`
+- 第二型号：**Razer BlackShark V2**（3.5mm）经 **Razer USB Sound Card**，`VID 0x1532 / PID 0x0529`；无电池/充电遥测，EQ/THX/麦克风走 THX，设备选择器可切换
 - 测试环境：Windows 11，Rust 1.99（MSVC），Tauri 2 + Svelte 5，Razer Synapse 4.0.827
 - 实测固件：**1.6.11.0**；序列号已脱敏
 
@@ -93,15 +94,16 @@ powershell -ExecutionPolicy Bypass -File .\scripts\razer-update-core.ps1 -Status
 
 ### ESPNANYS-REZAR — a Razer headset driver alternative for BlackShark V2 HyperSpeed
 
-ESPNANYS-REZAR is an independent, open-source **Razer headset driver alternative** for the Razer BlackShark V2 HyperSpeed (wireless `1532:0565`, wired `1532:056E`). It was started after a **Razer Synapse 4 background auto-update knocked the headset driver out**: the device disappeared from Windows audio and games, and recovering it took far too long. ESPNANYS-REZAR exists so the headset can be controlled — and kept stable — without depending on Synapse.
+ESPNANYS-REZAR is an independent, open-source **Razer headset driver alternative** for the Razer BlackShark V2 HyperSpeed (wireless `1532:0565`, wired `1532:056E`) and the BlackShark V2 through the Razer USB Sound Card (`1532:0529`). It was started after a **Razer Synapse 4 background auto-update knocked the headset driver out**: the device disappeared from Windows audio and games, and recovering it took far too long. ESPNANYS-REZAR exists so the headset can be controlled — and kept stable — without depending on Synapse.
 
-- Native HID control: battery, charging, firmware, serial, sidetone, EQ, device flags.
+- Native HID control on HyperSpeed: battery, charging, firmware, serial, sidetone, EQ, device flags.
+- Second model: BlackShark V2 + USB Sound Card; THX EQ/mic/spatial/normalization, no fake battery or sidetone; explicit device selector.
 - Optional THX APO reuse: sound normalization, stereo/spatial toggle, and THX processing via the copy already installed on your PC.
 - Built-in spatial demo: an original SVG radar and Web Audio test sound; no Razer/THX media is bundled.
 - Default-output guard: warns and disables THX controls when Windows is not using the Razer headset; HID settings still work.
 - Tray resident by default; closing the window hides it, and the tray menu has Show / Quit.
 - A Tauri 2 + Svelte 5 desktop UI with a directly draggable EQ curve and per-band dB input.
-- EQ preset tabs write immediately; curve edits auto-save after a short debounce; Reset restores `[1, -5, -3, 0, 1, 1, 1, 1, 1, -3]` and writes it. The default curve is also written once on startup and after a reconnect, because the headset can reset its EQ on reboot.
+- EQ preset tabs write immediately; curve edits auto-save after a short debounce; Reset restores `[1, -5, -3, 0, 1, 1, 1, 1, 1, -3]` and writes it. Game/music/movie defaults are per model and follow Razer Synapse's observed tables; the custom default is the same deliberate `[1, -5, -3, 0, 1, 1, 1, 1, 1, -3]` on both models. The default curve is also written once on startup and after a reconnect, because the headset can reset its EQ on reboot.
 - A reversible **disable Razer Synapse 4 / driver auto-updates** switch.
 - No Razer or THX binaries are bundled or redistributed.
 
