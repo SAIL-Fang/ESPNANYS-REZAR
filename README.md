@@ -105,7 +105,7 @@ ESPNANYS-REZAR is an independent, open-source **Razer headset driver alternative
 - Default-output guard: warns and disables THX controls when Windows is not using the Razer headset; HID settings still work.
 - Tray resident by default; closing the window hides it, and the tray menu has Show / Quit.
 - A Tauri 2 + Svelte 5 desktop UI with a directly draggable EQ curve and per-band dB input.
-- Original blue-haired whale-chan app icon; source and generator live in `assets/icon/` and `tools/make_whale_icon.py`. It is not official DeepSeek branding.
+- DeepSeek-chan app icon supplied by the project owner; source and generated sizes live in `assets/icon/`. It is not official DeepSeek branding.
 - EQ preset tabs write immediately; curve edits auto-save after a short debounce; editing a preset keeps that preset selected (no "modified" badge), and Reset restores the current preset's factory curve. The last selected preset and each preset's edited curve persist in `%APPDATA%\SAIL\ESPNANYS-REZAR\eq-presets.json`; on the next start they are written back after the model's output is active. Game/music/movie defaults are per model and follow Razer Synapse's observed tables; the custom default is the same deliberate `[1, -5, -3, 0, 1, 1, 1, 1, 1, -3]` on both models. The default curve is also written once on startup and after a reconnect when no EQ configuration exists, because the headset can reset its EQ on reboot.
 - A reversible **disable Razer Synapse 4 / driver auto-updates** switch.
 - No Razer or THX binaries are bundled or redistributed.
