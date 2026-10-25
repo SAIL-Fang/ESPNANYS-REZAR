@@ -31,9 +31,9 @@
 脚本就在仓库里，三个入口：
 
 ```text
-scripts\razer-update-off.cmd      # 关闭：挡更新清单/安装包域名 + 禁用升级任务（需管理员）
-scripts\razer-update-core.ps1     # 实际逻辑；可 -Status / -Disable / -Enable
-scripts\razer-update-on.cmd       # 恢复：还原 hosts + 启用升级任务（需管理员）
+scripts\razer-update-off.cmd      # 关闭：挡更新域名 + 按进程封网 + 禁用升级任务（需管理员）
+scripts\razer-update-core.ps1     # 实际逻辑；可 -Status / -Disable / -Enable / -NoFirewall
+scripts\razer-update-on.cmd       # 恢复：还原 hosts、移除防火墙规则、启用升级任务（需管理员）
 ```
 
 以管理员身份打开 PowerShell：
@@ -49,17 +49,18 @@ powershell -ExecutionPolicy Bypass -File .\scripts\razer-update-core.ps1 -Status
 .\scripts\razer-update-on.cmd
 ```
 
-它具体做两件事：
+它具体做三件事：
 
 - 在 `hosts` 中把 Razer 更新控制面域名指向 `0.0.0.0`：
   - 更新清单：`manifest.razerapi.com`、`manifest3.razerapi.com`
   - 安装包：`app-assets.razer.com`、`cdn.razersynapse.com`、`manifest-assets.razersynapse.com`
   - 端点发现：`discovery.razerapi.com`、`discovery3.razerapi.com`
 - 禁用计划任务 `Razer Upgrade Elevation Service`。
+- 按进程封网：调用 `scripts\block-razer-network.ps1`，给 `RazerAppEngine.exe`、`RazerInstaller.exe` 建入站/出站 Block 规则（组 `SAIL Razer Network Block`）。hosts 容易被雷神加速器之类的工具改写，这一层是兜底。
 
-**不会**屏蔽 `apps.razer.com`（雷云远程 UI 和升级安装器页必须在，屏蔽会让设备面板白屏；更新清单仍能读到，但安装包下载已被 `app-assets.razer.com` 拦住，装不上），也不动 `VSSrv`、THX APO 或 HID；关闭后只是不再自动获得 Synapse/THX 更新。执行结束会打印 hosts、计划任务、Razer Elevation Service、VSSrv 的验证结果，不保存日志。
+`hosts` 不屏蔽 `apps.razer.com`（雷云远程 UI 和升级安装器页），但按进程封网会让 `RazerAppEngine` 连不上它——**关闭期间 Synapse 面板、登录、云同步不可用是预期代价**，本机 HID、THX、`127.0.0.1` 控制通道不受影响（Windows 防火墙不过滤回环）。只想挡更新、保留面板时用 `-Disable -NoFirewall`。执行结束会打印 hosts、计划任务、防火墙规则、Razer Elevation Service、VSSrv 的验证结果，不保存日志。
 
-> 这是本机可逆开关，不是系统级“驱动锁”。Razer 以后如果更换 CDN/任务名，脚本可能失效；升级后先用 `-Status` 复查。屏蔽期间无法在线安装 Synapse 组件（驱动/模块），要装时先跑 `razer-update-on`，装完再关。企业设备或别人的电脑，先获得授权再运行。
+> 这是本机可逆开关，不是系统级“驱动锁”。Razer 以后如果更换 CDN/任务名，脚本可能失效；升级后先用 `-Status` 复查。屏蔽期间无法在线安装 Synapse 组件（驱动/模块），要装时先跑 `razer-update-on`，装完再关。`-Enable` 会一并删掉本脚本建的防火墙规则。企业设备或别人的电脑，先获得授权再运行。
 
 ## 它是什么
 
@@ -123,7 +124,9 @@ powershell -ExecutionPolicy Bypass -File .\scripts\razer-update-core.ps1 -Status
 .\scripts\razer-update-on.cmd
 ```
 
-The script points the Razer update control plane to `0.0.0.0` in the hosts file — update manifests (`manifest.razerapi.com`, `manifest3.razerapi.com`), package delivery (`app-assets.razer.com`, `cdn.razersynapse.com`, `manifest-assets.razersynapse.com`) and endpoint discovery (`discovery.razerapi.com`, `discovery3.razerapi.com`) — and disables the scheduled task `Razer Upgrade Elevation Service`. It does **not** block `apps.razer.com` (Synapse remote UI and the upgrade installer page): the manifest is still readable, but the payload host is blocked, so an update cannot install. It also leaves `VSSrv`, the THX APO, and HID alone. It is reversible and does not save logs; while it is on, Synapse components/drivers cannot be installed online — run `razer-update-on` first.
+The switch does three things. It points the Razer update control plane to `0.0.0.0` in the hosts file — update manifests (`manifest.razerapi.com`, `manifest3.razerapi.com`), package delivery (`app-assets.razer.com`, `cdn.razersynapse.com`, `manifest-assets.razersynapse.com`) and endpoint discovery (`discovery.razerapi.com`, `discovery3.razerapi.com`) — disables the scheduled task `Razer Upgrade Elevation Service`, and calls `scripts\block-razer-network.ps1` to create inbound/outbound block rules for `RazerAppEngine.exe` and `RazerInstaller.exe` (group `SAIL Razer Network Block`). The firewall layer is the backstop because accelerators such as 雷神 rewrite the hosts file.
+
+Because the process block cuts `RazerAppEngine` off, **the Synapse panel, sign-in and cloud sync stop working while the switch is on** — that is the intended trade-off, not a bug. Local HID, THX and the `127.0.0.1` control channel are unaffected (Windows Firewall does not filter loopback). Use `-Disable -NoFirewall` to block updates only and keep the panel. `razer-update-on.cmd` removes the firewall rules along with the hosts entries and re-enables the task. Nothing is logged to disk; while the switch is on, Synapse components/drivers cannot be installed online — run `razer-update-on` first.
 
 ### Build and run
 
@@ -211,8 +214,8 @@ scripts\diagnose-thx.cmd            # 只读，逐环 PASS/FAIL + 修复命令
 scripts\diagnose-thx.cmd -Fix       # 管理员：自动修复并复查
 
 # 4) 控制 Razer 自动更新（两个一键脚本，可逆）
-scripts\razer-update-off.cmd        # 挡更新清单/安装包/端点发现域名 + 禁用升级任务
-scripts\razer-update-on.cmd         # 恢复 hosts + 启用升级任务
+scripts\razer-update-off.cmd        # 挡更新域名 + 按进程封网 + 禁用升级任务
+scripts\razer-update-on.cmd         # 恢复 hosts、删防火墙规则、启用升级任务
 
 # 5) 构建 UI
 scripts\ui.cmd build --debug --no-bundle
@@ -221,12 +224,13 @@ scripts\ui.cmd build --debug --no-bundle
 scripts\run-ui.cmd
 ```
 
-> **自动更新开关说明**：`razer-update-off` 挡三组域名——更新清单（`manifest.razerapi.com`、
-> `manifest3.razerapi.com`）、安装包（`app-assets.razer.com`、`cdn.razersynapse.com`、
-> `manifest-assets.razersynapse.com`）、端点发现（`discovery.razerapi.com`、`discovery3.razerapi.com`）；
-> 不动 `apps.razer.com`（Synapse UI 与升级安装器页）、VSSrv、THX APO、HID；关闭后不会自动获得
-> Synapse/THX 更新，在线装组件也会失败（需要装时先 `razer-update-on`）。
-> 每次执行结束都会在终端打印“执行后验证”（hosts、升级任务、Razer Elevation Service、VSSrv），不保存日志文件。
+> **自动更新开关说明**：`razer-update-off` 做三件事——挡三组域名（更新清单、安装包、端点发现）、
+> 禁用 `Razer Upgrade Elevation Service`、按进程封 `RazerAppEngine.exe` 与 `RazerInstaller.exe`
+> （防火墙组 `SAIL Razer Network Block`）。按进程封网会连带切断 Synapse 面板/登录/云同步，
+> 这是预期代价；本机 HID、THX、`127.0.0.1` 控制通道不受影响。想只挡更新、保留面板用
+> `-Disable -NoFirewall`。`razer-update-on` 会把 hosts、防火墙规则、计划任务全部还原。
+> 在线装组件也会失败（需要装时先 `razer-update-on`）。
+> 每次执行结束都会在终端打印“执行后验证”（hosts、升级任务、防火墙规则、Razer Elevation Service、VSSrv），不保存日志文件。
 
 > **路径注意**：THX DLL 的 loader 在很深/很长的开发路径下会拒绝加载（表现为栈溢出/access denied）。
 > 所以 `sail_thx.exe` 和 `sail_ui.exe` 都要 staging 到 `%LOCALAPPDATA%\SAIL\bin` 再运行；

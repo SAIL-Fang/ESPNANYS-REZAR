@@ -8,25 +8,27 @@
     SAIL · 控制 Razer Synapse / THX 自动更新。
 
 .DESCRIPTION
-    只做两件事：
+    做三件事：
       1. 在 hosts 中把 Razer 更新控制面域名指向 0.0.0.0，按角色分三组：
            - 更新清单：manifest.razerapi.com、manifest3.razerapi.com
            - 安装包：app-assets.razer.com、cdn.razersynapse.com、
              manifest-assets.razersynapse.com
            - 端点发现：discovery.razerapi.com、discovery3.razerapi.com
       2. 禁用计划任务 "Razer Upgrade Elevation Service"。
+      3. 按进程封网：调用同目录 block-razer-network.ps1，给 RazerAppEngine.exe
+         和 RazerInstaller.exe 建入站/出站 Block 规则，规则组
+         "SAIL Razer Network Block"。hosts 会被雷神加速器之类的工具改写，
+         这一层是兜底；不需要时用 -NoFirewall 跳过。
 
     不会修改：
-      - apps.razer.com（Synapse 远程 UI 与升级安装器页）。它必须保持可解析，
-        否则设备面板会白屏；代价是更新清单仍能读到，但安装包下载已被
-        app-assets.razer.com 拦住，更新装不上。
-      - VSSrv / THX APO / 本地回环控制通道
-      - Razer AppEngine / Elevation Service / Game Manager 服务
-      - Windows 防火墙规则
+      - apps.razer.com 的 DNS 解析（hosts 不挡它）。但第 3 步封的是进程：
+        Synapse 面板本身就是从 apps.razer.com 拉远程 UI，所以关闭期间面板/
+        登录/云同步不可用是预期代价，不是脚本出错。
+      - VSSrv / THX APO / 本地回环控制通道（Windows 防火墙不过滤 127.0.0.1）
+      - Razer 的服务与驱动、其它防火墙规则（只增删本脚本组内的规则）
 
-    代价：cdn.razersynapse.com / manifest-assets.razersynapse.com 同时承载
-    Synapse 组件（驱动、模块）的在线安装包，屏蔽期间无法在线装组件；
-    需要装组件时先 -Enable，装完再 -Disable。
+    代价：关闭期间无法在线安装 Synapse 组件/驱动（cdn.razersynapse.com 被挡），
+    Synapse 面板与云功能也不可用；要装组件或恢复面板，先 -Enable。
 
     默认只读；-Disable / -Enable 需要管理员权限，脚本会自动请求提权。
 
@@ -34,10 +36,13 @@
     只读查看当前状态（默认）。
 
 .PARAMETER Disable
-    挡更新 CDN + 禁用升级任务。
+    挡更新域名 + 禁用升级任务 + 按进程封网。
 
 .PARAMETER Enable
-    恢复 hosts + 启用升级任务。
+    恢复 hosts + 启用升级任务 + 移除按进程封网规则。
+
+.PARAMETER NoFirewall
+    只做 hosts + 计划任务，不创建/移除防火墙规则（保留 Synapse 面板与云功能）。
 
 .PARAMETER NoElevate
     不自动提权；非管理员时直接报错。用于自动化。
@@ -49,6 +54,10 @@
     powershell -ExecutionPolicy Bypass -File scripts\razer-update-core.ps1 -Disable
 
 .EXAMPLE
+    # 只挡域名、保留 Synapse 面板与云功能
+    powershell -ExecutionPolicy Bypass -File scripts\razer-update-core.ps1 -Disable -NoFirewall
+
+.EXAMPLE
     powershell -ExecutionPolicy Bypass -File scripts\razer-update-core.ps1 -Enable
 #>
 [CmdletBinding()]
@@ -56,6 +65,7 @@ param(
     [switch]$Status,
     [switch]$Disable,
     [switch]$Enable,
+    [switch]$NoFirewall,
     [switch]$NoElevate
 )
 
@@ -78,6 +88,15 @@ $script:DomainGroups = [ordered]@{
 $script:Domains = @($script:DomainGroups.Values | ForEach-Object { $_ })
 $script:Marker = '# SAIL: block Razer update endpoints'
 $script:TaskName = 'Razer Upgrade Elevation Service'
+
+# 按进程封网：复用同目录的 block-razer-network.ps1，规则只属于这个组。
+$script:NetworkScript = Join-Path $PSScriptRoot 'block-razer-network.ps1'
+$script:NetworkGroup = 'SAIL Razer Network Block'
+$script:BlockExe = @(
+    # 安装器/更新器：不封它的话，手动跑安装器仍可下载更新包
+    (Join-Path $env:ProgramData 'Razer\Installer\App\RazerInstaller.exe')
+)
+
 $script:HostLines = @($script:Domains | ForEach-Object { "0.0.0.0 $_ $($script:Marker)" })
 $script:ExitCode = 0
 
@@ -139,6 +158,42 @@ function Get-Task {
     } catch {
         return $null
     }
+}
+
+function Get-NetworkRules {
+    return @(Get-NetFirewallRule -Group $script:NetworkGroup -ErrorAction SilentlyContinue)
+}
+
+# 调用同目录的 block-razer-network.ps1；宿主已提权，用 -NoElevate 避免二次弹窗。
+function Invoke-NetworkRules([bool]$Blocked) {
+    if (-not (Test-Path -LiteralPath $script:NetworkScript)) {
+        Write-Warn "找不到 $($script:NetworkScript)，跳过防火墙步骤"
+        return $false
+    }
+
+    $ps = (Get-Command powershell.exe).Source
+    $arguments = "-NoProfile -ExecutionPolicy Bypass -File `"$($script:NetworkScript)`" -NoElevate"
+
+    if ($Blocked) {
+        $arguments += ' -Apply'
+        $extra = @($script:BlockExe | Where-Object { Test-Path -LiteralPath $_ })
+        if ($extra.Count -gt 0) {
+            $arguments += ' -ExtraPath ' + (($extra | ForEach-Object { '"' + $_ + '"' }) -join ',')
+        }
+    } else {
+        $arguments += ' -Remove'
+    }
+
+    $process = Start-Process -FilePath $ps -ArgumentList $arguments -Wait -PassThru -NoNewWindow
+    if ($null -eq $process) {
+        Write-Warn '防火墙规则操作没有启动'
+        return $false
+    }
+    if ($process.ExitCode -ne 0) {
+        Write-Warn "防火墙规则操作失败（exit $($process.ExitCode)）"
+        return $false
+    }
+    return $true
 }
 
 function Get-DnsAddresses([string]$Domain) {
@@ -226,6 +281,13 @@ function Show-Status {
         Write-Warn "计划任务仍启用：$($script:TaskName) ($($task.State))"
     }
 
+    $netRules = @(Get-NetworkRules)
+    if ($netRules.Count -gt 0) {
+        Write-Ok "防火墙：$($netRules.Count) 条按进程阻断规则（$($script:NetworkGroup)）"
+    } else {
+        Write-Warn '防火墙：没有 SAIL 按进程阻断规则（只靠 hosts）'
+    }
+
     $vssrv = Get-Service -Name 'VSSrv' -ErrorAction SilentlyContinue
     if ($vssrv) {
         Write-Info "THX VSSrv: $($vssrv.Status) / $($vssrv.StartType)"
@@ -242,14 +304,16 @@ function Show-Status {
 
     Write-Host ''
     Write-Host '不会受影响：' -ForegroundColor Gray
-    Write-Host '  · apps.razer.com（Synapse 远程 UI；更新清单仍可读，但安装包装不上）' -ForegroundColor Gray
+    Write-Host '  · 本机 HID、设备设置、声音（走 127.0.0.1，防火墙不过滤回环）' -ForegroundColor Gray
     Write-Host '  · VSSrv / THX APO / 127.0.0.1 控制通道' -ForegroundColor Gray
-    Write-Host '  · HID、设备设置、声音' -ForegroundColor Gray
+    Write-Host '会受影响（按进程封网的代价）：' -ForegroundColor Gray
+    Write-Host '  · RazerAppEngine.exe 的全部外网访问：Synapse 面板、登录、云同步' -ForegroundColor Gray
     Write-Host '会被阻止：' -ForegroundColor Gray
     foreach ($group in $script:DomainGroups.GetEnumerator()) {
         Write-Host ("  · {0}：{1}" -f $group.Key, ($group.Value -join ' / ')) -ForegroundColor Gray
     }
     Write-Host "  · 计划任务 $($script:TaskName)" -ForegroundColor Gray
+    Write-Host "  · 防火墙规则组 $($script:NetworkGroup)（RazerAppEngine.exe / RazerInstaller.exe）" -ForegroundColor Gray
 }
 
 function Show-Verification([string]$Mode) {
@@ -286,6 +350,18 @@ function Show-Verification([string]$Mode) {
                 Write-Warn "DNS: $domain 仍解析到 $($dns -join ', ')（hosts 已写入，但可能被 DNS 缓存/代理影响）"
             }
         }
+
+        if ($NoFirewall) {
+            Write-Info '防火墙: 已跳过（-NoFirewall）'
+        } else {
+            $netRules = @(Get-NetworkRules)
+            if ($netRules.Count -gt 0) {
+                Write-Ok "防火墙: $($netRules.Count) 条按进程阻断规则"
+            } else {
+                Write-Fail '防火墙: 没有按进程阻断规则'
+                $failed = $true
+            }
+        }
     } else {
         if ($block.Count -eq 0) {
             Write-Ok 'hosts: 屏蔽项已移除'
@@ -300,6 +376,14 @@ function Show-Verification([string]$Mode) {
             Write-Ok "升级任务: $($task.State)（已恢复）"
         } else {
             Write-Fail '升级任务: 仍为 Disabled'
+            $failed = $true
+        }
+
+        $netRules = @(Get-NetworkRules)
+        if ($netRules.Count -eq 0) {
+            Write-Ok '防火墙: 按进程阻断规则已移除'
+        } else {
+            Write-Fail "防火墙: 仍有 $($netRules.Count) 条规则"
             $failed = $true
         }
     }
@@ -326,7 +410,7 @@ function Show-Verification([string]$Mode) {
 
 function Invoke-Disable {
     if (-not (Test-Admin)) {
-        Invoke-Elevated '-Disable'
+        if ($NoFirewall) { Invoke-Elevated '-Disable -NoFirewall' } else { Invoke-Elevated '-Disable' }
         return
     }
 
@@ -348,10 +432,20 @@ function Invoke-Disable {
         Write-Warn "计划任务不存在：$($script:TaskName)"
     }
 
+    if ($NoFirewall) {
+        Write-Info '防火墙：已跳过（-NoFirewall）'
+    } elseif (Invoke-NetworkRules $true) {
+        $rules = @(Get-NetworkRules)
+        Write-Ok "防火墙：已创建 $($rules.Count) 条按进程阻断规则（$($script:NetworkGroup)）"
+        Write-Warn 'RazerAppEngine.exe 已断网：Synapse 面板/登录/云同步不可用（HID、THX、回环通道不受影响）'
+    }
+
+    $done = '完成：更新域名已挡，升级任务已禁用'
+    if (-not $NoFirewall) { $done += '，RazerAppEngine 已断网' }
     Write-Host ''
-    Write-Ok '完成：更新 CDN 已挡，升级任务已禁用。'
+    Write-Ok ($done + '。')
     Write-Info 'THX 控制仍走 127.0.0.1 -> VSSrv，不受影响。'
-    Write-Info '恢复：运行 razer-update-on.cmd。'
+    Write-Info '恢复：运行 razer-update-on.cmd（会一并移除防火墙规则）。'
     Write-Host ''
     Show-Verification 'Disable'
     Show-Status
@@ -381,8 +475,12 @@ function Invoke-Enable {
         Write-Warn "计划任务不存在：$($script:TaskName)"
     }
 
+    if (Invoke-NetworkRules $false) {
+        Write-Ok '防火墙：已移除 SAIL 按进程阻断规则'
+    }
+
     Write-Host ''
-    Write-Ok '完成：hosts 与升级任务已恢复。'
+    Write-Ok '完成：hosts、升级任务与防火墙规则均已恢复。'
     Write-Host ''
     Show-Verification 'Enable'
     Show-Status

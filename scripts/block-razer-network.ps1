@@ -31,6 +31,7 @@
 
 .PARAMETER ExtraPath
     额外加入的 .exe 路径；用于自动发现漏掉的 Razer 组件。
+    显式给出的路径不受“默认只封 RazerAppEngine.exe”的限制。
 
 .PARAMETER All
     扩展到所有 Razer 可执行文件（安装器、卸载器、服务、工具）。
@@ -99,7 +100,7 @@ function Get-RazerExecutables {
         [System.StringComparer]::OrdinalIgnoreCase
     )
 
-    function Add-Candidate([string]$Path) {
+    function Add-Candidate([string]$Path, [switch]$Explicit) {
         if ([string]::IsNullOrWhiteSpace($Path)) { return }
         if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { return }
 
@@ -112,7 +113,8 @@ function Get-RazerExecutables {
 
         # Default mode: one network client application. RazerAppEngine spawns
         # its renderer/utility children from the same executable path.
-        if (-not $script:All -and [IO.Path]::GetFileName($full) -ne $script:NetworkClient) {
+        # Explicit -ExtraPath callers opt out of that filter on purpose.
+        if (-not $script:All -and -not $Explicit -and [IO.Path]::GetFileName($full) -ne $script:NetworkClient) {
             return
         }
 
@@ -181,9 +183,10 @@ function Get-RazerExecutables {
         }
     }
 
-    # 5. Explicit paths supplied by the user.
+    # 5. Explicit paths supplied by the user. These bypass the default
+    # RazerAppEngine-only filter: if you name a file, you mean it.
     foreach ($path in $ExtraPath) {
-        Add-Candidate $path
+        Add-Candidate $path -Explicit
     }
 
     return @($found | Sort-Object)
