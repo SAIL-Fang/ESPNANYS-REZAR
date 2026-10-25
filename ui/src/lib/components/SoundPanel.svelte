@@ -30,6 +30,12 @@
   );
   let thxInstalled = $derived(!!device.thx?.installed);
   let modelFrequencies = $derived(formatEqBands(device.status?.model.eqBands));
+  let resetPreset = $derived(
+    device.presets.find((preset) => preset.id === eqPreset) ??
+      device.presets.find((preset) => preset.id === "custom") ??
+      null
+  );
+  let resetCurve = $derived(resetPreset?.gains ?? DEFAULT_GAINS);
   let spatial = $derived(device.thx?.spatialEnabled ?? null);
   let spatialBusy = $derived(device.busy || !available || spatial === null);
   let battery = $derived(known(device.status?.battery, 0));
@@ -90,12 +96,19 @@
     scheduleGainSave(next);
   }
 
-  function resetGains() {
+  async function resetGains() {
     cancelAutoSave();
-    eqPreset = "custom";
-    const next = [...DEFAULT_GAINS];
+    // Reset the mode the user is looking at. Do not silently jump to Custom:
+    // Game/Music/Movie reset to their factory curve and stay selected.
+    const preset = resetPreset;
+    const next = [...(preset?.gains ?? DEFAULT_GAINS)];
+    if (preset) {
+      const ok = await device.setEqPreset(preset.id, preset.label);
+      if (!ok) return;
+      eqPreset = preset.id;
+    }
     gains = next;
-    scheduleGainSave(next);
+    await device.setEqGains(next);
   }
 
   onDestroy(() => {
@@ -173,7 +186,7 @@
       onreset={resetGains}
     />
     <p class="eq-default-note">
-      拖动/输入会自动写入；「重置」回到默认曲线 {DEFAULT_GAINS.join(", ")} dB，也会立即写入。
+      拖动/输入会自动写入；「重置」保持当前预设，回到{resetPreset?.label ?? "自定义"}默认曲线 {resetCurve.join(", ")} dB，并立即写入。
     </p>
   {:else}
     <p class="muted">均衡器需要 10 段数据。</p>
