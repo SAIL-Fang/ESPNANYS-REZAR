@@ -237,7 +237,7 @@ scripts\run-ui.cmd
 绿色包不需要安装、不需要管理员权限、不写 Program Files：
 
 ```text
-ESPNANYS-REZAR-v0.1.0-green\
+ESPNANYS-REZAR-v0.1.0-win-x64-green3\
 ├─ sail_ui.exe
 ├─ sail_thx.exe
 ├─ sail_cli.exe
