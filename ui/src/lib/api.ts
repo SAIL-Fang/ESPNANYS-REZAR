@@ -26,6 +26,12 @@ export const api = {
     invoke<EqPresetConfig>("save_eq_preset", { modelId, presetId, gains }),
   clearEqPreset: (modelId: string, presetId: string, selected: boolean) =>
     invoke<EqPresetConfig>("clear_eq_preset", { modelId, presetId, selected }),
+  saveNormalizationSetting: (
+    modelId: string,
+    level: number | null,
+    enabled: boolean | null
+  ) =>
+    invoke<EqPresetConfig>("save_normalization_setting", { modelId, level, enabled }),
   setActiveDevice: (modelId: string) => invoke<void>("set_active_device", { modelId }),
   getEqPresets: () => invoke<EqPreset[]>("get_eq_presets"),
   setSidetone: (enabled: boolean) => invoke<void>("set_sidetone", { enabled }),

@@ -4,7 +4,8 @@
 // SPDX-License-Identifier: MIT
 use sail_app::eq_config::{self, valid_gains, EqConfigView};
 use sail_app::{
-    device_summaries, set_active_pid, DeviceSnapshot, DeviceSummary, EqPreset, SailApp, ThxSnapshot,
+    device_summaries, present_pid_for, set_active_pid, DeviceSnapshot, DeviceSummary, EqPreset,
+    SailApp, ThxSnapshot,
 };
 use sail_hid::{list_models, model_for_product_id, ModelDescriptor};
 use std::fs;
@@ -194,15 +195,40 @@ async fn clear_eq_preset(
 }
 
 #[tauri::command]
+async fn save_normalization_setting(
+    model_id: String,
+    level: Option<i32>,
+    enabled: Option<bool>,
+) -> Result<EqConfigView, String> {
+    if let Some(level) = level {
+        if !eq_config::valid_normalization_level(level) {
+            return Err("normalization level must be 1..=100".to_string());
+        }
+    }
+    let path = eq_config_path()?;
+    blocking(move || {
+        let (mut config, notice) = locked_eq_config(&path)?;
+        config.set_normalization(&model_id, level, enabled);
+        save_locked_eq_config(&path, &config)?;
+        Ok(config.view(&model_id, notice))
+    })
+    .await
+}
+
+#[tauri::command]
 async fn set_active_device(model_id: String) -> Result<(), String> {
     let model = list_models()
         .map_err(|error| error.to_string())?
         .into_iter()
         .find(|model| model.id == model_id)
         .ok_or_else(|| format!("device not present: {model_id}"))?;
-    let pid = model.wireless_pid.or(model.wired_pid).ok_or_else(|| {
-        format!("device has no transport PID: {}", model.id)
-    })?;
+    // A headset can be online over the receiver or over its USB cable. Pin the
+    // transport that is actually present: the nominal wireless PID would leave
+    // every later command talking to a device that is not plugged in.
+    let pid = present_pid_for(&model.id)
+        .or(model.wireless_pid)
+        .or(model.wired_pid)
+        .ok_or_else(|| format!("device has no transport PID: {}", model.id))?;
     if model_for_product_id(pid).is_none() {
         return Err(format!("unsupported PID 0x{pid:04X}"));
     }
@@ -402,6 +428,7 @@ pub fn run() {
             select_eq_preset,
             save_eq_preset,
             clear_eq_preset,
+            save_normalization_setting,
             set_active_device,
             get_eq_presets,
             set_sidetone,

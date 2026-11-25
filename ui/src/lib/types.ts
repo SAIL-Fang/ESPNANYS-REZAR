@@ -89,6 +89,8 @@ export type DeviceSummary = {
 export type EqPresetConfig = {
   selected: string | null;
   presets: Record<string, number[]>;
+  normalizationLevel: number | null;
+  normalizationEnabled: boolean | null;
   notice: string | null;
 };
 

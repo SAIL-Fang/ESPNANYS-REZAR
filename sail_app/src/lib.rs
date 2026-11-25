@@ -244,6 +244,19 @@ fn present_models() -> Vec<(ModelDescriptor, u16)> {
     present
 }
 
+/// The transport PID of `model_id` that is actually plugged in right now.
+///
+/// One model can reach Windows over two transports (the 2.4 GHz receiver and
+/// the USB cable). Binding to a PID that is not present makes every later
+/// command fail, so callers that pin a device must resolve the live PID first
+/// and only fall back to the descriptor's nominal PIDs when nothing is found.
+pub fn present_pid_for(model_id: &str) -> Option<u16> {
+    present_models()
+        .into_iter()
+        .find(|(model, _)| model.id == model_id)
+        .map(|(_, pid)| pid)
+}
+
 fn output_matches_model(model: &ModelDescriptor, output: &audio_route::AudioOutput) -> bool {
     // A telemetry-only mouse never owns the audio output.
     if model.kind == DeviceKind::Mouse {

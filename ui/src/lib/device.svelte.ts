@@ -79,7 +79,29 @@ export class DeviceStore {
   }
 
   private desiredNormalizationLevel(): number {
+    // The config file is authoritative: WebView2 localStorage survives most
+    // restarts but can be wiped or left stale by a crashed session, and a
+    // stale value used to be replayed into THX on the next launch.
+    const stored = this.eqConfig?.normalizationLevel;
+    if (typeof stored === "number" && stored >= 1 && stored <= 100) {
+      return Math.round(stored);
+    }
     return storedNormalizationLevel();
+  }
+
+  private async persistNormalization(level: number | null, enabled: boolean | null) {
+    if (!this.activeModelId) return;
+    if (level === null && enabled === null) return;
+    try {
+      this.eqConfig = await api.saveNormalizationSetting(
+        this.activeModelId,
+        level,
+        enabled
+      );
+      if (this.eqConfig?.notice) this.notice = this.eqConfig.notice;
+    } catch (error) {
+      this.error = `保存声音标准化设置失败：${errorText(error)}`;
+    }
   }
 
   private async applyDesiredNormalization(level: number) {
@@ -88,6 +110,11 @@ export class DeviceStore {
     try {
       await api.setNormalization(level);
       if (this.thx) this.thx = { ...this.thx, level };
+      try {
+        localStorage.setItem(NORMALIZATION_KEY, String(level));
+      } catch {
+        // The config file already holds the level; this copy is only a cache.
+      }
       this.notice = `声音标准化默认 ${level}`;
     } catch (error) {
       // Retry on a later successful THX read rather than silently showing a
@@ -334,6 +361,9 @@ export class DeviceStore {
       if (includeThx) {
         try {
           const thx = await api.getThxStatus();
+          // The stored level lives in the config file, so it must be loaded
+          // before deciding whether THX needs a write.
+          if (!this.eqConfig) await this.loadEqConfig();
           this.settle(epoch, () => {
             let next = thx;
             if (!this.normalizationApplied && thx.enabled === true) {
@@ -346,6 +376,11 @@ export class DeviceStore {
                 void this.applyDesiredNormalization(desired);
               } else {
                 this.normalizationApplied = true;
+              }
+              // Seed the config file the first time this build sees the
+              // setting so later launches never depend on localStorage.
+              if (this.eqConfig && this.eqConfig.normalizationLevel === null) {
+                void this.persistNormalization(desired, thx.enabled);
               }
             }
             this.thx = next;
@@ -438,8 +473,9 @@ export class DeviceStore {
       try {
         localStorage.setItem(NORMALIZATION_KEY, String(level));
       } catch {
-        // Persistence is best-effort; the write to THX already succeeded.
+        // Persistence is best-effort; the config file carries the value.
       }
+      await this.persistNormalization(level, null);
     }
     await this.refreshThx();
   }
@@ -449,6 +485,7 @@ export class DeviceStore {
       () => api.setNormalizationEnabled(enabled),
       enabled ? "声音标准化已开启" : "声音标准化已关闭"
     );
+    if (ok) await this.persistNormalization(null, enabled);
     await this.refreshThx();
     if (ok && enabled) {
       const desired = this.desiredNormalizationLevel();

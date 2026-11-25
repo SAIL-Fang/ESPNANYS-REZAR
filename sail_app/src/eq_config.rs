@@ -17,8 +17,9 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-pub const EQ_CONFIG_VERSION: u32 = 1;
+pub const EQ_CONFIG_VERSION: u32 = 2;
 pub const PRESET_IDS: [&str; 4] = ["game", "music", "cinema", "custom"];
+pub const NORMALIZATION_RANGE: std::ops::RangeInclusive<i32> = 1..=100;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -46,6 +47,14 @@ pub struct ModelEqConfig {
     /// Sparse overrides; missing IDs use the factory curve.
     #[serde(default)]
     pub presets: BTreeMap<String, [i8; 10]>,
+    /// Last confirmed volume-normalization level (1..=100). Stored here
+    /// because WebView2 localStorage can be lost or left stale after a crash,
+    /// which used to resurrect an old level and silently rewrite THX with it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub normalization_level: Option<i32>,
+    /// Whether volume normalization was enabled the last time the app ran.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub normalization_enabled: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -53,6 +62,8 @@ pub struct ModelEqConfig {
 pub struct EqConfigView {
     pub selected: Option<String>,
     pub presets: BTreeMap<String, [i8; 10]>,
+    pub normalization_level: Option<i32>,
+    pub normalization_enabled: Option<bool>,
     pub notice: Option<String>,
 }
 
@@ -62,6 +73,8 @@ impl EqConfig {
         EqConfigView {
             selected: model.selected,
             presets: model.presets,
+            normalization_level: model.normalization_level,
+            normalization_enabled: model.normalization_enabled,
             notice,
         }
     }
@@ -85,6 +98,24 @@ impl EqConfig {
         }
     }
 
+    /// Remember the volume-normalization state for a model. `None` leaves the
+    /// stored value untouched so a level-only or enabled-only write cannot
+    /// erase the other half.
+    pub fn set_normalization(
+        &mut self,
+        model_id: &str,
+        level: Option<i32>,
+        enabled: Option<bool>,
+    ) {
+        let model = self.models.entry(model_id.to_owned()).or_default();
+        if let Some(level) = level {
+            model.normalization_level = Some(level);
+        }
+        if let Some(enabled) = enabled {
+            model.normalization_enabled = Some(enabled);
+        }
+    }
+
     fn normalize(&mut self) {
         self.version = EQ_CONFIG_VERSION;
         self.models.retain(|_, model| {
@@ -96,9 +127,21 @@ impl EqConfig {
                     model.selected = None;
                 }
             }
-            !model.presets.is_empty() || model.selected.is_some()
+            if let Some(level) = model.normalization_level {
+                if !valid_normalization_level(level) {
+                    model.normalization_level = None;
+                }
+            }
+            !model.presets.is_empty()
+                || model.selected.is_some()
+                || model.normalization_level.is_some()
+                || model.normalization_enabled.is_some()
         });
     }
+}
+
+pub fn valid_normalization_level(level: i32) -> bool {
+    NORMALIZATION_RANGE.contains(&level)
 }
 
 pub fn is_preset_id(id: &str) -> bool {
@@ -241,5 +284,49 @@ mod tests {
         let view = config.view("model", None);
         assert_eq!(view.presets.len(), 1);
         assert!(view.presets.contains_key("game"));
+    }
+
+    #[test]
+    fn normalization_round_trips_and_invalid_level_is_dropped() {
+        let path = path("normalization");
+        let mut config = EqConfig::default();
+        config.set_normalization("model", Some(8), Some(true));
+        save_atomic(&path, &config).unwrap();
+        let (loaded, notice) = load(&path);
+        assert!(notice.is_none());
+        let view = loaded.view("model", None);
+        assert_eq!(view.normalization_level, Some(8));
+        assert_eq!(view.normalization_enabled, Some(true));
+
+        // A level-only write keeps the stored enabled flag.
+        let mut level_only = loaded;
+        level_only.set_normalization("model", Some(42), None);
+        save_atomic(&path, &level_only).unwrap();
+        let (loaded, _) = load(&path);
+        assert_eq!(loaded.view("model", None).normalization_level, Some(42));
+        assert_eq!(loaded.view("model", None).normalization_enabled, Some(true));
+
+        let mut invalid = loaded;
+        invalid.set_normalization("model", Some(0), None);
+        save_atomic(&path, &invalid).unwrap();
+        let (loaded, _) = load(&path);
+        assert_eq!(loaded.view("model", None).normalization_level, None);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn version_one_file_still_loads() {
+        let path = path("v1");
+        fs::write(
+            &path,
+            br#"{"version":1,"models":{"model":{"selected":"game","presets":{"music":[1,2,3,4,5,6,7,8,9,0]}}}}"#,
+        )
+        .unwrap();
+        let (loaded, notice) = load(&path);
+        assert!(notice.is_none());
+        let view = loaded.view("model", None);
+        assert_eq!(view.selected.as_deref(), Some("game"));
+        assert_eq!(view.normalization_level, None);
+        let _ = fs::remove_file(&path);
     }
 }

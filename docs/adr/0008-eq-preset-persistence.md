@@ -60,3 +60,5 @@ factory curve. They must be stored separately.
   override.
 - The app has one user-editable config file outside the install directory.
 - A corrupt or hand-edited file can never prevent startup.
+- Version 2 adds the sound-normalization fields to the same file; see
+  [ADR-0010](0010-normalization-persistence.md).
