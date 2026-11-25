@@ -69,6 +69,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\razer-update-core.ps1 -Status
 - 无线接收器：`VID 0x1532 / PID 0x0565`
 - 有线 USB：`VID 0x1532 / PID 0x056E`
 - 第二型号：**Razer BlackShark V2**（3.5mm）经 **Razer USB Sound Card**，`VID 0x1532 / PID 0x0529`；无电池/充电遥测，EQ/THX/麦克风走 THX，设备库可切换
+- 鼠标遥测：**Razer Viper V3 Pro**（`VID 0x1532 / PID 0x00C0` 有线、`0x00C1` 无线接收器）；设备库卡片显示电量与充电状态（90 字节 Razer Protocol 2.5，feature report），只读、不进入工作区
 - 测试环境：Windows 11，Rust 1.99（MSVC），Tauri 2 + Svelte 5，Razer Synapse 4.0.827
 - 实测固件：**1.6.11.0**；序列号已脱敏
 
@@ -99,9 +100,10 @@ ESPNANYS-REZAR is an independent, open-source **Razer headset driver alternative
 
 - Native HID control on HyperSpeed: battery, charging, firmware, serial, sidetone, EQ, device flags.
 - Second model: BlackShark V2 + USB Sound Card; THX EQ/mic/spatial/normalization, no fake battery or sidetone; device hub selects it.
+- Mouse telemetry: Razer Viper V3 Pro (`1532:00C0` wired, `1532:00C1` wireless dongle) shows live battery/charging on a read-only hub card, using its 90-byte Razer Protocol 2.5 feature-report channel.
 - Optional THX APO reuse: sound normalization, stereo/spatial toggle, and THX processing via the copy already installed on your PC.
 - Built-in spatial demo: an original SVG radar and Web Audio test sound; no Razer/THX media is bundled.
-- Device hub: always opens a library of connected supported headsets; selecting a card does not change the Windows output until you choose it inside the device.
+- Device hub: always opens a library of connected supported devices (headsets plus telemetry-only mouse cards); selecting a card does not change the Windows output until you choose it inside the device.
 - Default-output guard: warns and disables THX controls when Windows is not using the Razer headset; HID settings still work.
 - Tray resident by default; closing the window hides it, and the tray menu has Show / Quit.
 - A Tauri 2 + Svelte 5 desktop UI with a directly draggable EQ curve and per-band dB input.
@@ -155,8 +157,8 @@ Razer headset driver · Razer headset driver alternative · disable Razer Synaps
 
 | 模块 | 状态 | 说明 |
 |---|---|---|
-| `sail_core` | ✅ | 64 字节帧、seq、checksum、命令/响应/事件；13 个 mock 测试 |
-| `sail_hid` | ✅ 实测 | `hidapi` 枚举 0xFF14、真实电量/固件/序列号 |
+| `sail_core` | ✅ | 64 字节耳机帧、seq、checksum、命令/响应/事件；另有独立 `mouse` 模块（90 字节 Protocol 2.5、feature report、电量/充电） |
+| `sail_hid` | ✅ 实测 | `hidapi` 枚举 0xFF14 耳机集合；`MouseHidTransport` 走鼠标 MI_00 的 90 字节 feature report，实测读到电量/充电 |
 | `sail_app` | ✅ | 应用编排、`Field` 部分成功快照、THX host 接缝；CLI/UI 共用 |
 | `sail_cli` | ✅ 实测 | `status` / `battery` / `sidetone` / `eq-preset` / `eq-gains` / `mic-*` |
 | `sail_thx_bridge` | ✅ 实测 | 加载已安装 THX DLL；render + capture EQ/噪声门/降噪/标准化/亮丽人声/预览/侧音 |
@@ -458,7 +460,7 @@ razer-blackshark-v2-hyperspeed/
 ├─ tools/collect.py           # 采集设备快照
 ├─ tools/hid_descriptor.py    # HID report descriptor 解析
 ├─ tools/pe_exports.py        # PE 导出表解析（THX DLL）
-├─ docs/protocol.md           # 64 字节 HID 协议细节
+├─ docs/protocol.md           # 耳机 64 字节帧 + 鼠标 90 字节 Protocol 2.5
 ├─ docs/thx.md                # 内置 THX 的安装、注册表、API
 ├─ docs/audio-features.md     # EQ/声音标准化/麦克风增强的完整映射
 ├─ docs/device-identification.md # Razer VID/PID、产品类型与驱动边界
@@ -500,7 +502,7 @@ razer-blackshark-v2-hyperspeed/
 - 校验：`XOR(bytes[2..61]) ^ 0x02`
 - 响应：`02 02 seq 00 00 00 05 00 80 80 CMD STATUS LEN DATA... CHK 00`
 
-完整字段、命令表和事件表见 [docs/protocol.md](docs/protocol.md)。
+完整字段、命令表和事件表见 [docs/protocol.md](docs/protocol.md)。鼠标（Viper V3 Pro）不复用这套帧：它走独立的 90 字节 Razer Protocol 2.5 feature report，见 protocol.md §9。
 
 ### THX
 

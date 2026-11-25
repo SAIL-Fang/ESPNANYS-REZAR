@@ -12,6 +12,12 @@ export type Field<T> =
 
 export type Link = "disconnected" | "standby" | "wireless" | "wired" | "unknown";
 
+/**
+ * Product class. Headsets have a workspace; mice are telemetry-only hub cards.
+ * The Rust `DeviceKind` serializes as these exact strings.
+ */
+export type DeviceKind = "headset" | "mouse";
+
 export type AudioEndpoint = {
   id: string;
   name: string;
@@ -36,6 +42,7 @@ export type ModelCapabilities = {
 export type ModelDescriptor = {
   id: string;
   displayName: string;
+  kind: DeviceKind;
   vendorId: number;
   wirelessPid: number | null;
   wiredPid: number | null;

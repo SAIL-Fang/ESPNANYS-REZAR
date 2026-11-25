@@ -17,7 +17,7 @@
   - the sidetone control uses `model.sidetoneMax` and the model's `sidetone` capability.
   - `SoundPanel` and `MicPanel` gate their THX controls on the model capability.
 - Do **not** introduce the behavior-bearing `HeadsetProfile` trait or a model-specific THX container profile until a second adapter or a concrete protocol difference exists.
-- Backend capability enforcement beyond the existing online gate is deferred; the current Razer descriptor remains the only production model.
+- Backend capability enforcement beyond the existing online gate is deferred; the current Razer descriptor remains the only production model. *(Amended by ADR-0009: `sail_app::ensure_writable_model` now rejects writes to a telemetry-only device, and `set_active_pid` rejects non-headset PIDs.)*
 
 ## Consequences
 

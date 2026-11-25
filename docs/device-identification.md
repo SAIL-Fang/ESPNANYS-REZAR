@@ -17,7 +17,7 @@ Razer **确实用 VID/PID 识别设备**，但 PID 在本地主要承担三件�
 
 - `VID 0x1532 + PID 0x0565/0x056E` 已经足够做**本机型**的强识别；
 - 不需要读取 Razer 驱动来判断“这是耳机”；
-- 不要把 `0x1532` 单独当作耳机：Razer 的鼠标/键盘也用这个 VID。
+- 不要把 `0x1532` 单独当作耳机：Razer 的鼠标/键盘也用这个 VID。**Viper V3 Pro** 实测使用两种 PID：`0x00C0`（有线）与 `0x00C1`（无线接收器），两者都在本项目真机验证过。两种形态都走显式 PID 映射，并用 `DeviceKind` 区分耳机（可进入工作区）与鼠标（只读遥测卡片）。
 
 ## 证据
 
@@ -151,6 +151,8 @@ pub fn model_for(vendor_id: u16, product_id: u16) -> Option<DeviceModel> {
 ```
 
 对于音频 endpoint，Windows 不提供 HID PID，所以仍只能用 endpoint 名称/容器匹配；当前 `audio_route` 和 THX container 的精确名称检查是合理的。
+
+> 现状（2026-11-25）：已按上述方向实现 `sail_hid::model_for_product_id` 的 PID → `ModelDescriptor` 映射，并新增 `DeviceKind::Mouse` 的 Viper V3 Pro 档案（`0x00C0`/`0x00C1`，见 ADR-0009）。鼠标与耳机使用不同的 HID 协议（90 字节 feature report），因此 transport 也按 kind 分开选择，不共用 0xFF14 集合。
 
 ## 限制
 

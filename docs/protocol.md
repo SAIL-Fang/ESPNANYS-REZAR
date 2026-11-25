@@ -1,6 +1,11 @@
-# HID 协议 — 64 字节 Razer 帧
+# HID 协议 — 耳机 64 字节帧与鼠标 90 字节 Protocol 2.5
 
-本文只描述 **Razer BlackShark V2 HyperSpeed**（PID `0x0565` 无线 / `0x056E` 有线）在 interface 3、usage page `0xFF14` 上的 64 字节 output/input report 协议。它和 Razer 鼠标常见的 90/91 字节 Protocol 2.5 不是同一套。
+本文描述本项目实测的两种 Razer HID 协议：
+
+- **耳机**（BlackShark V2 HyperSpeed，PID `0x0565` 无线 / `0x056E` 有线）在 interface 3、usage page `0xFF14` 上的 64 字节 output/input report 协议（第 1–8 节）。
+- **鼠标**（Viper V3 Pro，PID `0x00C0` 有线 / `0x00C1` 无线接收器）在 interface 0 鼠标集合上的 90 字节 feature report 协议（第 9 节）。
+
+两者帧长、传输方式、CRC 规则都不同，实现上必须使用独立模块和独立 transport，不能共用缓冲区。
 
 ## 1. HID 集合选择
 
@@ -250,3 +255,73 @@ CLI：
 python tools/razerctl.py status
 python tools/razerctl.py sidetone off
 ```
+
+## 9. 鼠标：90 字节 Razer Protocol 2.5
+
+支持型号：**Razer Viper V3 Pro**（PID `0x00C0` 有线 / `0x00C1` 无线接收器，OpenRazer 命名）。两种形态都已在真机验证：有线形态读到电量与充电状态；无线接收器（`0x00C1`）同样走 MI_00 的 90 字节 feature report，需按 9.1 的接收器等待读取。
+
+### 9.1 HID 接口
+
+鼠标**没有** `0xFF14` / `0xFFA0` vendor usage 集合。控制通道是 MI_00（interface 0，usage page `0x0001`、usage `0x0002`，鼠标集合）里的 **90 字节 feature report，report ID 0**：
+
+```text
+...
+05 01 09 02 A1 01 ...
+75 08 95 5A B1 03 C0   ; Report size 8, report count 0x5A(90), Feature
+```
+
+hidapi 读写都要在缓冲区前加 report ID 字节：请求是 91 字节 `[0x00] + 90 字节帧`；`get_feature_report` 返回 91 字节，首字节为 report ID，去掉后才是帧。
+
+**SET_REPORT 与 GET_REPORT 之间必须等待**，否则接收器会返回 `status = 0x01`（busy）、arguments 全 0 的空帧。等待时长取自 OpenRazer 的接收器常量：有线 Viper 约 31 ms（`RAZER_NEW_MOUSE_RECEIVER_WAIT_US = 31000`），Viper 无线接收器约 60 ms（`RAZER_VIPER_MOUSE_RECEIVER_WAIT_US = 59900`）。本项目有线用 31 ms、无线用 60 ms；30 ms 实测已能拿到成功帧，60 ms 留有余量。
+
+### 9.2 帧格式（90 字节）
+
+| 偏移 | 长度 | 含义 |
+|---|---|---|
+| 0 | 1 | status（请求写 `0x00`；应答 `0x02` 成功） |
+| 1 | 1 | transaction id（Viper V3 Pro 用 `0x1F`） |
+| 2–3 | 2 | remaining_packets（`00 00`） |
+| 4 | 1 | protocol type（`0x00`） |
+| 5 | 1 | data size（读命令为 `0x02`） |
+| 6 | 1 | command class（本协议 `0x07`） |
+| 7 | 1 | command id（bit7 = direction：读命令 `0x80` / `0x84`） |
+| 8–87 | 80 | arguments |
+| 88 | 1 | CRC = `XOR(frame[2..88])` |
+| 89 | 1 | reserved `0x00` |
+
+### 9.3 命令
+
+| 名称 | class | command | 应答 |
+|---|---|---|---|
+| 电量 | `0x07` | `0x80` | `arguments[1]` = 0–255 原始刻度，按 `(raw * 100 + 127) / 255` 换算百分比 |
+| 充电 | `0x07` | `0x84` | `arguments[1]` = 0/1 |
+
+实测电量请求（含 report ID 前导字节）：
+
+```text
+00 1F 00 00 00 02 07 80 00 ×80 85 00
+```
+
+实测应答：
+
+```text
+00 02 1F 00 00 00 02 07 80 00 67 00 ... E2 00
+```
+
+`status = 0x02`，`arguments[1] = 0x67 = 103`。重复读取得到 103 / 105 等变化值（约 40–41%），证明原始刻度是 0–255 而不是百分比直出。
+
+### 9.4 状态码与重试
+
+- `0x01` busy、`0x02` successful、`0x03` failure、`0x04` timeout、`0x05` not supported。
+- busy / timeout 可重试（OpenRazer 重试 5 次、间隔 10ms；本项目电量/充电各重试 3 次）。
+- CRC 不符、command class 不符必须丢弃；鼠标协议没有事件帧，电量只能轮询。
+
+### 9.5 与耳机协议的区别
+
+| | 耳机 | 鼠标 |
+|---|---|---|
+| 帧长 | 64（含 report ID `0x02`） | 90（feature report ID 0，hidapi 缓冲 91） |
+| 传输 | output/input report | feature report（SET_REPORT/GET_REPORT） |
+| CRC | `XOR[2..62] ^ 0x02` | `XOR[2..88]` |
+| 集合 | usage page `0xFF14` | 鼠标集合 usage page `0x0001` / usage `0x0002` |
+| 事件 | 有（`0x0A` 帧） | 无 |

@@ -38,6 +38,21 @@ function storedNormalizationLevel(): number {
   return DEFAULT_NORMALIZATION_LEVEL;
 }
 
+/**
+ * Only headsets have a workspace. A telemetry-only mouse must never become
+ * the active device: its PID would then drive headset write paths.
+ */
+function activeHeadset(
+  models: ModelDescriptor[],
+  preferredId: string
+): ModelDescriptor | null {
+  return (
+    models.find((model) => model.id === preferredId && model.kind === "headset") ??
+    models.find((model) => model.kind === "headset") ??
+    null
+  );
+}
+
 export class DeviceStore {
   status = $state<DeviceSnapshot | null>(null);
   thx = $state<ThxSnapshot | null>(null);
@@ -196,9 +211,17 @@ export class DeviceStore {
       try {
         preferred = localStorage.getItem(ACTIVE_MODEL_KEY) ?? "";
       } catch {
-        // localStorage can be unavailable; fall back to the first model.
+        // localStorage can be unavailable; fall back to the first headset.
       }
-      const active = devices.find((model) => model.id === preferred) ?? devices[0];
+      const active = activeHeadset(devices, preferred);
+      if (!active) {
+        // A hub with only telemetry devices has nothing to control yet, but
+        // the cards still show battery/standby state.
+        this.activeModelId = "";
+        const summaries = await api.getDeviceSummaries();
+        this.applySummaries(summaries);
+        return;
+      }
       this.activeModelId = active.id;
       await api.setActiveDevice(active.id);
       const summaries = await api.getDeviceSummaries();
@@ -227,10 +250,14 @@ export class DeviceStore {
         return;
       }
       let activeId = this.activeModelId;
-      if (!summaries.some((summary) => summary.model.id === activeId)) {
-        activeId = summaries[0].model.id;
-        this.activeModelId = activeId;
-        await api.setActiveDevice(activeId);
+      const activeSummary = summaries.find((summary) => summary.model.id === activeId);
+      if (!activeSummary || activeSummary.model.kind !== "headset") {
+        const next = summaries.find((summary) => summary.model.kind === "headset");
+        activeId = next?.model.id ?? "";
+        if (activeId !== this.activeModelId) {
+          this.activeModelId = activeId;
+          if (activeId) await api.setActiveDevice(activeId);
+        }
       }
       this.applySummaries(
         summaries.map((summary) => ({
@@ -245,6 +272,8 @@ export class DeviceStore {
 
   async activateDevice(modelId: string) {
     if (!modelId) return;
+    const model = this.devices.find((item) => item.id === modelId);
+    if (model && model.kind !== "headset") return;
     await api.setActiveDevice(modelId);
     this.activeModelId = modelId;
     try {

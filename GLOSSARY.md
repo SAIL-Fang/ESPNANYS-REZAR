@@ -2,9 +2,29 @@
 
 ## Active device
 
-The one supported Razer model the app is currently reading and writing. When
-several supported devices are present, the user can select one explicitly;
-the selection determines which model profile and preset set apply.
+The one supported Razer **headset** the app is currently reading and writing.
+When several supported headsets are present, the user can select one
+explicitly; the selection determines which model profile and preset set apply.
+A telemetry-only device is never the active device.
+
+## Device kind
+
+The product class of a model profile: `headset` or `mouse`. A headset has a
+workspace and writable controls; a mouse is telemetry-only. Device kind is part
+of the model profile, not inferred from a transport or PID at the call site.
+
+## Telemetry-only device
+
+A supported device whose hub card shows live readings (for example battery and
+charging) but that has no workspace and accepts no writes. The Viper V3 Pro
+mouse is the first telemetry-only profile: its card is read-only and cannot be
+entered.
+
+## Razer Protocol 2.5
+
+The 90-byte HID feature-report protocol that supported Razer mice use for
+telemetry (battery, charging). It is a different protocol from the headset's
+64-byte output/input frames; the two must never share a transport.
 
 ## Model profile
 
@@ -29,7 +49,8 @@ gate and the audio-output gate.
 A lightweight, per-device card record used by the hub: identity, connection or
 standby state, supported power fields, THX capability, and active marker. A
 summary is not a full device snapshot and must not force an audio-output or THX
-container switch.
+container switch. Telemetry-only summaries carry battery/charging plus link
+state, and nothing they cannot read.
 
 ## Output target
 

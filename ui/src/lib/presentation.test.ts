@@ -6,9 +6,16 @@
  */
 import test from "node:test";
 import assert from "node:assert/strict";
-import { derivePresentation, outputMatchesModel } from "./presentation.ts";
+import { deriveHubCard, derivePresentation, outputMatchesModel } from "./presentation.ts";
 import { deriveUiState } from "./ui-state.ts";
-import type { AudioEndpoint, DeviceSnapshot, Field, ThxSnapshot } from "./types";
+import type {
+  AudioEndpoint,
+  DeviceSnapshot,
+  DeviceSummary,
+  Field,
+  ModelDescriptor,
+  ThxSnapshot
+} from "./types";
 
 function field<T>(value: T): Field<T> {
   return { state: "known", value };
@@ -34,6 +41,7 @@ function status(overrides: Partial<DeviceSnapshot> = {}): DeviceSnapshot {
     model: {
       id: "razer.blackshark_v2_hyperspeed",
       displayName: "BlackShark V2 HyperSpeed",
+      kind: "headset",
       vendorId: 0x1532,
       wirelessPid: 0x0565,
       wiredPid: 0x056e,
@@ -202,4 +210,140 @@ test("model without THX capability never presents THX as ready", () => {
     })
   );
   assert.equal(view.thxLabel, "THX 不支持");
+});
+
+function mouseModel(): ModelDescriptor {
+  return {
+    id: "razer.viper_v3_pro",
+    displayName: "Viper V3 Pro",
+    kind: "mouse",
+    vendorId: 0x1532,
+    wirelessPid: 0x00c1,
+    wiredPid: 0x00c0,
+    usagePage: 0x0001,
+    usage: 0x0002,
+    interfaceNumber: 0,
+    eqBands: [],
+    sidetoneMax: null,
+    capabilities: {
+      battery: true,
+      charging: true,
+      firmware: false,
+      serial: false,
+      autoPowerOff: false,
+      dongleLed: false,
+      speakerEq: false,
+      eqViaThx: false,
+      sidetone: false,
+      thx: false,
+      micCapture: false
+    }
+  };
+}
+
+function mouseSummary(overrides: Partial<DeviceSummary> = {}): DeviceSummary {
+  return {
+    model: mouseModel(),
+    connected: true,
+    link: "wired",
+    battery: field(41),
+    charging: field(true),
+    thxCapable: false,
+    currentOutput: false,
+    active: false,
+    ...overrides
+  };
+}
+
+function headsetSummary(overrides: Partial<DeviceSummary> = {}): DeviceSummary {
+  return {
+    model: status().model,
+    connected: true,
+    link: "wireless",
+    battery: field(94),
+    charging: field(false),
+    thxCapable: true,
+    currentOutput: true,
+    active: true,
+    ...overrides
+  };
+}
+
+test("mouse hub card is telemetry only", () => {
+  const card = deriveHubCard(mouseSummary());
+  assert.equal(card.title, "Viper V3 Pro");
+  assert.equal(card.subtitle, "USB 有线");
+  assert.equal(card.stateText, "在线");
+  assert.equal(card.batteryText, "41% · 充电中");
+  assert.equal(card.thxText, null);
+  assert.equal(card.outputText, null);
+  assert.equal(card.typeText, "有线鼠标");
+  assert.equal(card.actionText, "仅显示电量");
+  assert.equal(card.interactive, false);
+  assert.equal(card.connected, true);
+  assert.equal(card.standby, false);
+});
+
+test("wireless mouse hub card shows the 2.4 GHz link", () => {
+  const card = deriveHubCard(mouseSummary({ link: "wireless" }));
+  assert.equal(card.subtitle, "2.4 GHz 无线");
+  assert.equal(card.typeText, "无线鼠标");
+});
+
+test("sleeping mouse hub card stays visible as a standby card", () => {
+  const card = deriveHubCard(
+    mouseSummary({
+      connected: false,
+      link: "standby",
+      battery: timeout(),
+      charging: timeout()
+    })
+  );
+  assert.equal(card.stateText, "鼠标未开机");
+  assert.equal(card.batteryText, "—");
+  assert.equal(card.standby, true);
+  assert.equal(card.connected, false);
+});
+
+test("wired mouse without a reply reads as unavailable, not online", () => {
+  const card = deriveHubCard(
+    mouseSummary({
+      connected: false,
+      link: "wired",
+      battery: timeout(),
+      charging: timeout()
+    })
+  );
+  assert.equal(card.stateText, "鼠标未响应");
+  assert.equal(card.batteryText, "—");
+  assert.equal(card.standby, false);
+  assert.equal(card.connected, false);
+});
+
+test("headset hub card keeps the enter action and output row", () => {
+  const card = deriveHubCard(headsetSummary());
+  assert.equal(card.title, "BlackShark V2 HyperSpeed");
+  assert.equal(card.subtitle, "2.4 GHz 无线");
+  assert.equal(card.stateText, "当前输出");
+  assert.equal(card.batteryText, "94% · 未充电");
+  assert.equal(card.thxText, "可用");
+  assert.equal(card.outputText, "当前输出");
+  assert.equal(card.typeText, "无线耳机");
+  assert.equal(card.actionText, "进入设备 →");
+  assert.equal(card.interactive, true);
+  assert.equal(card.active, true);
+});
+
+test("headset hub card reports a powered-off headset", () => {
+  const card = deriveHubCard(
+    headsetSummary({
+      connected: false,
+      link: "standby",
+      battery: timeout(),
+      charging: timeout()
+    })
+  );
+  assert.equal(card.stateText, "耳机未开机");
+  assert.equal(card.batteryText, "—");
+  assert.equal(card.standby, true);
 });

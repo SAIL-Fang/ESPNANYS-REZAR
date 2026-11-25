@@ -8,6 +8,8 @@
 //! sequence/checksum rules, commands, responses and events. The Windows HID
 //! transport lives in `sail_hid`.
 
+pub mod mouse;
+
 use std::fmt;
 use std::time::{Duration, Instant};
 

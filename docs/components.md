@@ -40,7 +40,7 @@
                         ▼
 ┌─────────────────────────────────────────────────────────────┐
 │ sail_hid_service / sail_daemon（我们的后台）                 │
-│   ├─ sail_hid（我们的 64-byte HID 协议）                     │
+│   ├─ sail_hid（64-byte 耳机帧 / 90-byte 鼠标 feature report） │
 │   │     └─ HID interface 3 / usage 0xFF14                   │
 │   │           └─ Razer 耳机/接收器（雷蛇硬件）               │
 │   └─ sail_thx_bridge（我们的独立进程）                       │

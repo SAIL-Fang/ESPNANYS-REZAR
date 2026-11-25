@@ -1,6 +1,6 @@
 # 多型号耳机抽象设计
 
-> 状态：Draft 2。已支持 Razer BlackShark V2 HyperSpeed（0565/056E）和 BlackShark V2 + Razer USB Sound Card（0529）。
+> 状态：Draft 2。已支持 Razer BlackShark V2 HyperSpeed（0565/056E）、BlackShark V2 + Razer USB Sound Card（0529），以及只提供遥测的 Razer Viper V3 Pro（00C0/00C1，ADR-0009）。
 > 目标：把“协议/传输”和“型号能力”分开，避免 UI、THX、EQ 和 Razer 常量继续耦在一起。
 
 ## 0. 当前耦合点
@@ -96,6 +96,7 @@ model: { id, displayName, capabilities }
 UI 只消费：
 
 - `model.displayName`：侧栏、标题、状态文案
+- `model.kind`：`headset` 可进入工作区、`mouse` 只显示遥测卡片（ADR-0009）
 - `capabilities.*`：显示/隐藏或禁用对应控件
 - `eqBands`：EQ 横轴
 - `uiState`：锁定/输出/THX 状态
@@ -103,7 +104,7 @@ UI 只消费：
 禁止：
 
 - 在 Svelte 里写 `BlackShark`、`0x0565`、`10 段`、侧音 `0..15`
-- 用 PID 决定是否显示某功能
+- 用 PID 决定是否显示某功能（用 `kind` / `capabilities`）
 - 用一个全局 `connected` 推导所有能力
 
 ## 3. 型号注册与发现
@@ -130,7 +131,7 @@ sail_app::profiles::all() -> &'static [&'static dyn ProfileFactory]
 3. `sail_app` 把 `DeviceSnapshot` 增加 `model`，但字段值仍与现在一致。
 4. UI 改为读 `model.displayName` / `capabilities` / `eqBands`，去掉硬编码文案。
 5. THX 查找改为 `ThxProfile`，按型号解析 container。
-6. 新增第二个型号时只增加 profile + tests，不改 UI 主体。
+6. 新增同 kind 的型号时只增加 profile + tests，不改 UI 主体；新增 device kind（如遥测鼠标）才需要在 presentation 层补分支与测试（ADR-0009）。
 
 ## 5. 测试 seam
 
@@ -159,4 +160,5 @@ sail_app::profiles::all() -> &'static [&'static dyn ProfileFactory]
 - 尚未落地：行为型 `HeadsetProfile` trait；当前用 data descriptor + capability branch 实现两个真实 adapter。
 - 第二步已落地：`sidetone_max` 进入 descriptor；`deriveUiState` 读取 `capabilities.thx`；presentation 输出 `THX 不支持`；Sound/Mic panel 读取 `eqBands`、`sidetoneMax` 和 capability；UI 不再固定 0–15 或 10 段文案。
 - 第二个型号已落地：`0529` descriptor（`FFA0`、无电池/侧音、THX EQ）、model-specific preset、设备选择器、默认输出切换、THX `SetRenderEQGains` 与容器 hint；详见 ADR-0006。
+- 遥测设备已落地：`DeviceKind` 进入 descriptor；Viper V3 Pro 走独立 `sail_core::mouse`（90 字节 Protocol 2.5）与 `MouseHidTransport`；hub 卡片只显示电量/充电、不可进入工作区；详见 ADR-0009。
 - 仍明确推迟：行为型 `HeadsetProfile` trait、按型号命令映射、THX profile；见 `docs/adr/0004-model-descriptor-scope.md`。

@@ -7,8 +7,8 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { device } from "$lib/device.svelte";
-  import { chargingText, fieldText } from "$lib/types";
-  import type { DeviceSummary, ModelDescriptor } from "$lib/types";
+  import { HUB_COPY, deriveHubCard, modelSubtitle, modelTitle } from "$lib/presentation";
+  import type { HubCard } from "$lib/presentation";
 
   interface Props {
     onEnter: (modelId: string) => void;
@@ -22,47 +22,56 @@
     }, 10_000);
     return () => clearInterval(timer);
   });
-
-  function title(model: ModelDescriptor): string {
-    if (model.capabilities.eqViaThx) return "BlackShark V2";
-    return model.displayName;
-  }
-
-  function subtitle(summary: DeviceSummary): string {
-    return modelSubtitle(summary.model, summary.link);
-  }
-
-  function modelSubtitle(model: ModelDescriptor, link?: string): string {
-    if (model.capabilities.eqViaThx) {
-      return "Razer USB Sound Card · 3.5mm";
-    }
-    if (link === "wireless") return "2.4 GHz 无线";
-    if (link === "wired") return "USB 有线";
-    return "无线耳机";
-  }
-
-  function stateText(summary: DeviceSummary): string {
-    if (!summary.connected) {
-      return summary.link === "standby" ? "耳机未开机" : "未连接";
-    }
-    return summary.currentOutput ? "当前输出" : "输出未指向";
-  }
-
-  function powerText(summary: DeviceSummary): string {
-    if (!summary.model.capabilities.battery) return "无电池遥测";
-    if (!summary.connected) return "—";
-    const battery = fieldText(summary.battery, "%");
-    const charging = chargingText(summary.charging);
-    return `${battery} · ${charging}`;
-  }
 </script>
+
+{#snippet cardBody(card: HubCard)}
+  <div class="device-card-top">
+    <div>
+      <h2>{card.title}</h2>
+      <p>{card.subtitle}</p>
+    </div>
+    {#if card.active}
+      <span class="badge ok">当前控制</span>
+    {/if}
+  </div>
+
+  <div class="device-card-status">
+    <span class="dot" class:on={card.connected} class:standby={card.standby}></span>
+    <strong>{card.stateText}</strong>
+  </div>
+
+  <dl class="device-card-facts">
+    <div>
+      <dt>电量</dt>
+      <dd>{card.batteryText}</dd>
+    </div>
+    {#if card.thxText !== null}
+      <div>
+        <dt>THX</dt>
+        <dd>{card.thxText}</dd>
+      </div>
+    {/if}
+    {#if card.outputText !== null}
+      <div>
+        <dt>输出</dt>
+        <dd>{card.outputText}</dd>
+      </div>
+    {/if}
+    <div>
+      <dt>类型</dt>
+      <dd>{card.typeText}</dd>
+    </div>
+  </dl>
+
+  <span class="device-card-enter">{card.actionText}</span>
+{/snippet}
 
 <div class="device-hub">
   <header class="hub-head">
     <div>
       <div class="brand hub-brand">ESPNANYS-REZAR</div>
       <h1>设备库</h1>
-      <p>选择一个已连接的雷蛇耳机进入控制。选择设备不会自动更改 Windows 默认输出。</p>
+      <p>{HUB_COPY.headline}</p>
     </div>
     <button class="btn" type="button" onclick={() => void device.refreshSummaries()}>
       刷新设备
@@ -72,49 +81,22 @@
   {#if device.summaries.length > 0}
     <section class="hub-grid" aria-label="已连接设备">
       {#each device.summaries as summary (summary.model.id)}
-        <button
-          class="device-card"
-          class:active={summary.active}
-          type="button"
-          onclick={() => onEnter(summary.model.id)}
-          aria-label={`进入 ${title(summary.model)}`}
-        >
-          <div class="device-card-top">
-            <div>
-              <h2>{title(summary.model)}</h2>
-              <p>{subtitle(summary)}</p>
-            </div>
-            {#if summary.active}
-              <span class="badge ok">当前控制</span>
-            {/if}
+        {@const card = deriveHubCard(summary)}
+        {#if card.interactive}
+          <button
+            class="device-card"
+            class:active={card.active}
+            type="button"
+            onclick={() => onEnter(summary.model.id)}
+            aria-label={`进入 ${card.title}`}
+          >
+            {@render cardBody(card)}
+          </button>
+        {:else}
+          <div class="device-card telemetry-card" class:active={card.active}>
+            {@render cardBody(card)}
           </div>
-
-          <div class="device-card-status">
-            <span class="dot" class:on={summary.connected} class:standby={summary.link === "standby"}></span>
-            <strong>{stateText(summary)}</strong>
-          </div>
-
-          <dl class="device-card-facts">
-            <div>
-              <dt>电量</dt>
-              <dd>{powerText(summary)}</dd>
-            </div>
-            <div>
-              <dt>THX</dt>
-              <dd>{summary.thxCapable ? "可用" : "不支持"}</dd>
-            </div>
-            <div>
-              <dt>输出</dt>
-              <dd>{summary.currentOutput ? "当前输出" : "未指向"}</dd>
-            </div>
-            <div>
-              <dt>类型</dt>
-              <dd>{summary.model.capabilities.eqViaThx ? "USB 声卡" : "无线耳机"}</dd>
-            </div>
-          </dl>
-
-          <span class="device-card-enter">进入设备 →</span>
-        </button>
+        {/if}
       {/each}
     </section>
   {:else if device.devices.length > 0 && device.loading}
@@ -123,7 +105,7 @@
         <div class="device-card loading-card" aria-busy="true">
           <div class="device-card-top">
             <div>
-              <h2>{title(model)}</h2>
+              <h2>{modelTitle(model)}</h2>
               <p>{modelSubtitle(model)}</p>
             </div>
           </div>
@@ -137,13 +119,13 @@
     </section>
   {:else if device.loading}
     <section class="hub-empty">
-      <strong>正在扫描设备…</strong>
-      <span>正在识别已连接的雷蛇耳机和输出状态。</span>
+      <strong>{HUB_COPY.scanningTitle}</strong>
+      <span>{HUB_COPY.scanningDetail}</span>
     </section>
   {:else}
     <section class="hub-empty">
-      <strong>未检测到受支持的雷蛇耳机</strong>
-      <span>请连接 BlackShark V2 HyperSpeed 接收器，或 Razer USB Sound Card。</span>
+      <strong>{HUB_COPY.emptyTitle}</strong>
+      <span>{HUB_COPY.emptyDetail}</span>
     </section>
   {/if}
 

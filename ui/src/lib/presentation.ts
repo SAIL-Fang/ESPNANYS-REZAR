@@ -8,7 +8,13 @@
  * of recombining connection/THX/telemetry flags themselves.
  */
 import { chargingText, fieldText } from "./types.ts";
-import type { DeviceSnapshot, ThxSnapshot } from "./types.ts";
+import type {
+  DeviceSnapshot,
+  DeviceSummary,
+  Link,
+  ModelDescriptor,
+  ThxSnapshot
+} from "./types.ts";
 import type { UiState } from "./ui-state.ts";
 
 export interface PresentationInput {
@@ -149,4 +155,102 @@ export function outputMatchesModel(status: DeviceSnapshot | null): boolean {
   return status?.model.capabilities.eqViaThx
     ? name.includes("usb sound card")
     : name.includes("blackshark");
+}
+
+/** Copy that frames the hub as a launcher for control surfaces only. */
+export const HUB_COPY = {
+  headline: "选择一个已连接的雷蛇设备。只有耳机可以进入控制；选择设备不会自动更改 Windows 默认输出。",
+  emptyTitle: "未检测到受支持的雷蛇设备",
+  emptyDetail: "请连接受支持的雷蛇设备：耳机可进入控制，鼠标仅显示电量。",
+  scanningTitle: "正在扫描设备…",
+  scanningDetail: "正在识别已连接的雷蛇设备和输出状态。"
+} as const;
+
+/**
+ * One hub card, already resolved to display strings. Mice are telemetry-only:
+ * they show battery and link state, never THX/output rows, and cannot open a
+ * workspace.
+ */
+export interface HubCard {
+  title: string;
+  subtitle: string;
+  stateText: string;
+  batteryText: string;
+  thxText: string | null;
+  outputText: string | null;
+  typeText: string;
+  actionText: string;
+  interactive: boolean;
+  active: boolean;
+  connected: boolean;
+  standby: boolean;
+}
+
+export function modelTitle(model: ModelDescriptor): string {
+  if (model.capabilities.eqViaThx) return "BlackShark V2";
+  return model.displayName;
+}
+
+export function modelSubtitle(model: ModelDescriptor, link?: Link): string {
+  if (model.kind === "mouse") {
+    if (link === "wireless") return "2.4 GHz 无线";
+    if (link === "wired") return "USB 有线";
+    return "无线鼠标";
+  }
+  if (model.capabilities.eqViaThx) {
+    return "Razer USB Sound Card · 3.5mm";
+  }
+  if (link === "wireless") return "2.4 GHz 无线";
+  if (link === "wired") return "USB 有线";
+  return "无线耳机";
+}
+
+function hubStateText(summary: DeviceSummary): string {
+  const { model } = summary;
+  if (!summary.connected) {
+    if (model.kind === "mouse") {
+      if (summary.link === "standby") return "鼠标未开机";
+      if (summary.link === "wired") return "鼠标未响应";
+      return "未连接";
+    }
+    if (summary.link !== "standby") return "未连接";
+    return "耳机未开机";
+  }
+  // Output routing is a headset concern; a mouse is simply online.
+  if (model.kind === "mouse") return "在线";
+  return summary.currentOutput ? "当前输出" : "输出未指向";
+}
+
+function hubBatteryText(summary: DeviceSummary): string {
+  if (!summary.model.capabilities.battery) return "无电池遥测";
+  if (!summary.connected) return "—";
+  return `${fieldText(summary.battery, "%")} · ${chargingText(summary.charging)}`;
+}
+
+function hubTypeText(model: ModelDescriptor, link: Link): string {
+  if (model.kind === "mouse") {
+    if (link === "wireless") return "无线鼠标";
+    if (link === "wired") return "有线鼠标";
+    return "鼠标";
+  }
+  return model.capabilities.eqViaThx ? "USB 声卡" : "无线耳机";
+}
+
+export function deriveHubCard(summary: DeviceSummary): HubCard {
+  const { model } = summary;
+  const telemetryOnly = model.kind === "mouse";
+  return {
+    title: modelTitle(model),
+    subtitle: modelSubtitle(model, summary.link),
+    stateText: hubStateText(summary),
+    batteryText: hubBatteryText(summary),
+    thxText: telemetryOnly ? null : summary.thxCapable ? "可用" : "不支持",
+    outputText: telemetryOnly ? null : summary.currentOutput ? "当前输出" : "未指向",
+    typeText: hubTypeText(model, summary.link),
+    actionText: telemetryOnly ? "仅显示电量" : "进入设备 →",
+    interactive: !telemetryOnly,
+    active: summary.active,
+    connected: summary.connected,
+    standby: summary.link === "standby"
+  };
 }

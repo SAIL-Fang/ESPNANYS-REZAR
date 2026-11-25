@@ -3,7 +3,9 @@
 // Copyright (c) 2026 SAIL
 // SPDX-License-Identifier: MIT
 use sail_app::eq_config::{self, valid_gains, EqConfigView};
-use sail_app::{device_summaries, set_active_pid, DeviceSnapshot, DeviceSummary, EqPreset, SailApp, ThxSnapshot};
+use sail_app::{
+    device_summaries, set_active_pid, DeviceSnapshot, DeviceSummary, EqPreset, SailApp, ThxSnapshot,
+};
 use sail_hid::{list_models, model_for_product_id, ModelDescriptor};
 use std::fs;
 use std::path::PathBuf;
@@ -204,8 +206,8 @@ async fn set_active_device(model_id: String) -> Result<(), String> {
     if model_for_product_id(pid).is_none() {
         return Err(format!("unsupported PID 0x{pid:04X}"));
     }
-    set_active_pid(Some(pid));
-    Ok(())
+    // The app layer owns the invariant that only a headset can be active.
+    set_active_pid(Some(pid)).map_err(|error| error.to_string())
 }
 
 #[tauri::command]

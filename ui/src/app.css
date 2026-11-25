@@ -187,6 +187,9 @@ button:focus-visible, input:focus-visible {
 .device-card-facts dt { color: var(--sail-faint); font-size: 10px; }
 .device-card-facts dd { margin: 4px 0 0; color: var(--sail-ink-2); font-size: 11px; line-height: 1.45; }
 .device-card-enter { margin-top: auto; color: var(--sail-blue); font-size: 11px; font-weight: 600; }
+.device-card.telemetry-card { cursor: default; }
+.device-card.telemetry-card:hover { border-color: var(--sail-line); transform: none; }
+.device-card.telemetry-card .device-card-enter { color: var(--sail-faint); }
 .hub-empty {
   display: flex;
   flex-direction: column;

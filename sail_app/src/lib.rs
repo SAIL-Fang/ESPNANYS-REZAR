@@ -13,13 +13,15 @@ mod audio_route;
 pub mod eq_config;
 
 pub use audio_route::{AudioEndpoint, AudioOutput};
+use sail_core::mouse::Telemetry;
 use sail_core::{
     parse_event, Command, Error as CoreError, Event, SailDevice, SpeakerEqPreset, Transport,
     FRAME_LEN, HYPERSPEED_EQ_GAINS, USB_SOUND_CARD_EQ_GAINS,
 };
 use sail_hid::{
-    enumerate, model_for_product_id, HidDevice, HidTransport, ModelDescriptor, PID_USB_SOUND_CARD,
-    PID_WIRED, PID_WIRELESS,
+    enumerate, matches_vendor_usage, model_for_product_id, open_mouse_device, profile_rank,
+    DeviceKind, HidDevice, HidTransport, ModelDescriptor, PID_USB_SOUND_CARD, PID_WIRED,
+    PID_WIRELESS,
 };
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -98,11 +100,23 @@ impl HidWrite for RealHidWrite<'_> {
     }
 }
 
+/// Telemetry-only devices have no writable headset commands. Guarding here
+/// keeps a mouse PID from ever being driven through the 64-byte protocol.
+fn ensure_writable_model(model: &ModelDescriptor) -> Result<(), SailError> {
+    if model.kind == DeviceKind::Mouse {
+        return Err(SailError::Invalid(
+            "该设备仅提供电量遥测，没有可写的耳机控制".into(),
+        ));
+    }
+    Ok(())
+}
+
 fn open_online_device(pid: Option<u16>) -> Result<(HidDevice, bool), SailError> {
     let transport = HidTransport::open(pid).map_err(|_| SailError::NoReceiver)?;
     let model = model_for_product_id(transport.info().product_id)
         .ok_or(SailError::NoReceiver)?
         .clone();
+    ensure_writable_model(&model)?;
     let wired = model.wired_pid == Some(transport.info().product_id);
     let base = SailDevice::new(transport).with_timeout(Duration::from_millis(600));
     let mut device = if wired {
@@ -216,7 +230,7 @@ fn present_models() -> Vec<(ModelDescriptor, u16)> {
         let Some(model) = model_for_product_id(device.product_id) else {
             continue;
         };
-        if device.usage_page != model.usage_page || device.usage != model.usage {
+        if !matches_vendor_usage(model, &device) {
             continue;
         }
         if present
@@ -231,6 +245,10 @@ fn present_models() -> Vec<(ModelDescriptor, u16)> {
 }
 
 fn output_matches_model(model: &ModelDescriptor, output: &audio_route::AudioOutput) -> bool {
+    // A telemetry-only mouse never owns the audio output.
+    if model.kind == DeviceKind::Mouse {
+        return false;
+    }
     let Some(name) = output.name.as_deref() else {
         return false;
     };
@@ -244,7 +262,7 @@ fn output_matches_model(model: &ModelDescriptor, output: &audio_route::AudioOutp
 
 pub fn device_summaries() -> Vec<DeviceSummary> {
     let active = active_pid();
-    present_models()
+    let mut summaries: Vec<DeviceSummary> = present_models()
         .into_iter()
         .map(|(_model, pid)| {
             let snapshot = SailApp::with_pid(Some(pid)).snapshot();
@@ -259,7 +277,9 @@ pub fn device_summaries() -> Vec<DeviceSummary> {
                 active: active == Some(pid),
             }
         })
-        .collect()
+        .collect();
+    summaries.sort_by_key(|summary| profile_rank(&summary.model));
+    summaries
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -282,10 +302,20 @@ pub struct DeviceSnapshot {
 
 impl DeviceSnapshot {
     fn disconnected(reason: String) -> Self {
+        Self::unavailable(
+            sail_hid::unknown_model().clone(),
+            Link::Disconnected,
+            reason,
+        )
+    }
+
+    /// The transport could not be opened. Keep whatever identity we do know, so
+    /// the hub does not render an unopenable device as `unknown_model()`.
+    fn unavailable(model: ModelDescriptor, link: Link, reason: String) -> Self {
         Self {
             connected: false,
-            link: Link::Disconnected,
-            model: sail_hid::unknown_model().clone(),
+            link,
+            model,
             battery: Field::Error(reason.clone()),
             charging: Field::Error(reason.clone()),
             firmware: Field::Error(reason.clone()),
@@ -324,6 +354,81 @@ impl DeviceSnapshot {
             audio_output: audio_route::current_output(),
             issues,
         }
+    }
+}
+
+/// Read-only telemetry for a protocol 2.5 mouse: battery and charging are the
+/// only fields a Viper V3 Pro answers.
+fn mouse_snapshot(model: ModelDescriptor, pid: Option<u16>) -> DeviceSnapshot {
+    let link = match pid {
+        Some(pid) if model.wireless_pid == Some(pid) => Link::Wireless,
+        Some(pid) if model.wired_pid == Some(pid) => Link::Wired,
+        _ => Link::Unknown,
+    };
+    let mut device = match open_mouse_device(pid) {
+        Ok(device) => device,
+        Err(error) => return DeviceSnapshot::unavailable(model, link, error.to_string()),
+    };
+    mouse_snapshot_from(&mut device, model, link)
+}
+
+fn mouse_field<T>(result: Result<T, CoreError>, label: &str, issues: &mut Vec<String>) -> Field<T> {
+    match result {
+        Ok(value) => Field::Known(value),
+        Err(error) => {
+            issues.push(format!("mouse {label}: {error}"));
+            link_error(error)
+        }
+    }
+}
+
+/// Build the hub summary view of a mouse from a telemetry seam. A mouse that
+/// answers neither query is not reported as online: a wireless one is asleep
+/// behind a live dongle, a wired one did not respond.
+fn mouse_snapshot_from(
+    reader: &mut dyn Telemetry,
+    model: ModelDescriptor,
+    link: Link,
+) -> DeviceSnapshot {
+    let mut issues = Vec::new();
+    let battery = mouse_field(reader.battery_percent(), "battery", &mut issues);
+    let charging = mouse_field(reader.charging(), "charging", &mut issues);
+    if !battery.is_known() && !charging.is_known() {
+        issues.push("mouse handshake: battery/charging timed out".into());
+        // A wireless receiver can be present while the mouse itself is off;
+        // wired silence means the mouse stopped answering.
+        let standby_link = if link == Link::Wireless {
+            Link::Standby
+        } else {
+            link
+        };
+        return DeviceSnapshot::standby(standby_link, model, battery, charging, issues);
+    }
+    connected_mouse(model, link, battery, charging, issues)
+}
+
+fn connected_mouse(
+    model: ModelDescriptor,
+    link: Link,
+    battery: Field<u8>,
+    charging: Field<bool>,
+    issues: Vec<String>,
+) -> DeviceSnapshot {
+    DeviceSnapshot {
+        connected: true,
+        link,
+        model,
+        battery,
+        charging,
+        // Product-level capability parity: a mouse has no headset controls.
+        firmware: Field::Unsupported,
+        serial: Field::Unsupported,
+        auto_power_off_min: Field::Unsupported,
+        dongle_led: Field::Unsupported,
+        speaker_preset_eq: Field::Unsupported,
+        edition: Field::Unsupported,
+        audio_output: audio_route::current_output(),
+        issues,
     }
 }
 
@@ -669,10 +774,24 @@ fn active_pid_slot() -> &'static Mutex<Option<u16>> {
     ACTIVE_PID.get_or_init(|| Mutex::new(None))
 }
 
-pub fn set_active_pid(pid: Option<u16>) {
+/// Bind the app to one device. Only controllable headsets can be active; a
+/// telemetry-only mouse is never more than a hub card.
+pub fn set_active_pid(pid: Option<u16>) -> Result<(), SailError> {
+    if let Some(pid) = pid {
+        let Some(model) = model_for_product_id(pid) else {
+            return Err(SailError::Invalid(format!("PID 0x{pid:04X} 不受支持")));
+        };
+        if model.kind != DeviceKind::Headset {
+            return Err(SailError::Invalid(format!(
+                "{} 仅提供电量遥测，无法设为当前设备",
+                model.display_name
+            )));
+        }
+    }
     if let Ok(mut slot) = active_pid_slot().lock() {
         *slot = pid;
     }
+    Ok(())
 }
 
 pub fn active_pid() -> Option<u16> {
@@ -729,6 +848,14 @@ impl SailApp {
     /// does not discard the fields that did respond.
     pub fn snapshot(&self) -> DeviceSnapshot {
         let _guard = hid_lock();
+        // Mice speak a different wire format; resolve the model before opening
+        // the headset transport so the two protocols never share a handle.
+        if let Some(model) = self.model() {
+            if model.kind == DeviceKind::Mouse {
+                let model = model.clone();
+                return mouse_snapshot(model, self.pid);
+            }
+        }
         let transport = match HidTransport::open(self.pid) {
             Ok(transport) => transport,
             Err(error) => return DeviceSnapshot::disconnected(error.to_string()),
@@ -1317,5 +1444,148 @@ mod tests {
             serde_json::to_string(&Link::Standby).unwrap(),
             "\"standby\""
         );
+    }
+
+    struct FakeTelemetry {
+        battery: Option<Result<u8, CoreError>>,
+        charging: Option<Result<bool, CoreError>>,
+    }
+
+    impl Telemetry for FakeTelemetry {
+        fn battery_percent(&mut self) -> Result<u8, CoreError> {
+            self.battery.take().unwrap_or(Err(CoreError::Timeout))
+        }
+
+        fn charging(&mut self) -> Result<bool, CoreError> {
+            self.charging.take().unwrap_or(Err(CoreError::Timeout))
+        }
+    }
+
+    fn viper_model() -> ModelDescriptor {
+        sail_hid::RAZER_VIPER_V3_PRO.clone()
+    }
+
+    #[test]
+    fn mouse_snapshot_reads_battery_and_charging_only() {
+        let mut reader = FakeTelemetry {
+            battery: Some(Ok(41)),
+            charging: Some(Ok(true)),
+        };
+        let snapshot = mouse_snapshot_from(&mut reader, viper_model(), Link::Wireless);
+        assert!(snapshot.connected);
+        assert_eq!(snapshot.link, Link::Wireless);
+        assert_eq!(snapshot.battery, Field::Known(41));
+        assert_eq!(snapshot.charging, Field::Known(true));
+        assert_eq!(snapshot.model.kind, sail_hid::DeviceKind::Mouse);
+        assert_eq!(snapshot.firmware, Field::Unsupported);
+        assert_eq!(snapshot.dongle_led, Field::Unsupported);
+    }
+
+    #[test]
+    fn wireless_mouse_keeps_charging_when_battery_times_out() {
+        let mut reader = FakeTelemetry {
+            battery: Some(Err(CoreError::Timeout)),
+            charging: Some(Ok(false)),
+        };
+        let snapshot = mouse_snapshot_from(&mut reader, viper_model(), Link::Wireless);
+        assert!(snapshot.connected);
+        assert_eq!(snapshot.battery, Field::Timeout);
+        assert_eq!(snapshot.charging, Field::Known(false));
+    }
+
+    #[test]
+    fn wireless_mouse_is_standby_when_both_queries_time_out() {
+        let mut reader = FakeTelemetry {
+            battery: None,
+            charging: None,
+        };
+        let snapshot = mouse_snapshot_from(&mut reader, viper_model(), Link::Wireless);
+        assert!(!snapshot.connected);
+        assert_eq!(snapshot.link, Link::Standby);
+        assert_eq!(snapshot.battery, Field::Timeout);
+        assert!(
+            snapshot
+                .issues
+                .iter()
+                .any(|issue| issue.contains("mouse handshake")),
+            "issues: {:?}",
+            snapshot.issues
+        );
+    }
+
+    #[test]
+    fn wired_mouse_without_a_reply_is_unavailable() {
+        let mut reader = FakeTelemetry {
+            battery: None,
+            charging: None,
+        };
+        let snapshot = mouse_snapshot_from(&mut reader, viper_model(), Link::Wired);
+        assert!(!snapshot.connected);
+        assert_eq!(snapshot.link, Link::Wired);
+        assert_eq!(snapshot.battery, Field::Timeout);
+        assert_eq!(snapshot.charging, Field::Timeout);
+        assert!(
+            snapshot
+                .issues
+                .iter()
+                .any(|issue| issue.contains("mouse handshake")),
+            "issues: {:?}",
+            snapshot.issues
+        );
+    }
+
+    #[test]
+    fn a_failed_mouse_open_keeps_the_mouse_identity() {
+        let snapshot =
+            DeviceSnapshot::unavailable(viper_model(), Link::Wired, "open failed".into());
+        assert!(!snapshot.connected);
+        assert_eq!(snapshot.model.kind, sail_hid::DeviceKind::Mouse);
+        assert_eq!(snapshot.model.id, "razer.viper_v3_pro");
+    }
+
+    #[test]
+    fn summaries_order_headsets_before_mice() {
+        let headset = sail_hid::RAZER_BLACKSHARK_V2_HYPERSPEED.clone();
+        let usb = sail_hid::RAZER_BLACKSHARK_V2_USB_SOUND_CARD.clone();
+        assert!(profile_rank(&headset) < profile_rank(&usb));
+        assert!(profile_rank(&usb) < profile_rank(&viper_model()));
+    }
+
+    #[test]
+    fn set_active_pid_rejects_telemetry_only_devices() {
+        let error = set_active_pid(Some(sail_hid::VIPER_V3_PRO_WIRED_PID)).unwrap_err();
+        assert!(
+            matches!(&error, SailError::Invalid(reason) if reason.contains("电量遥测")),
+            "error: {error}"
+        );
+        assert!(set_active_pid(Some(0x0F00)).is_err(), "unknown PID");
+    }
+
+    #[test]
+    fn mouse_is_not_writable() {
+        let error = ensure_writable_model(&viper_model()).unwrap_err();
+        assert!(
+            matches!(&error, SailError::Invalid(reason) if reason.contains("电量遥测")),
+            "error: {error}"
+        );
+        assert!(ensure_writable_model(&sail_hid::RAZER_BLACKSHARK_V2_HYPERSPEED).is_ok());
+    }
+
+    #[test]
+    #[ignore = "requires the physical Viper V3 Pro"]
+    fn mouse_summary_comes_from_the_physical_mouse() {
+        let summaries = device_summaries();
+        let mouse = summaries
+            .iter()
+            .find(|summary| summary.model.kind == sail_hid::DeviceKind::Mouse)
+            .expect("Viper V3 Pro is not attached");
+        assert!(
+            matches!(mouse.battery, Field::Known(_)),
+            "battery: {:?}",
+            mouse.battery,
+        );
+        assert!(mouse.connected);
+        assert!(!mouse.thx_capable);
+        assert!(!mouse.current_output);
     }
 }
