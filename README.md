@@ -108,7 +108,7 @@ ESPNANYS-REZAR is an independent, open-source **Razer headset driver alternative
 - Tray resident by default; closing the window hides it, and the tray menu has Show / Quit.
 - A Tauri 2 + Svelte 5 desktop UI with a directly draggable EQ curve and per-band dB input.
 - DeepSeek-chan app icon supplied by the project owner; source and generated sizes live in `assets/icon/`. It is not official DeepSeek branding.
-- EQ preset tabs write immediately; curve edits auto-save after a short debounce; editing a preset keeps that preset selected (no "modified" badge), and Reset restores the current preset's factory curve. The last selected preset and each preset's edited curve persist in `%APPDATA%\SAIL\ESPNANYS-REZAR\eq-presets.json`; on the next start they are written back after the model's output is active. Game/music/movie defaults are per model and follow Razer Synapse's observed tables; the custom default is the same deliberate `[1, -5, -3, 0, 1, 1, 1, 1, 1, -3]` on both models. The default curve is also written once on startup and after a reconnect when no EQ configuration exists, because the headset can reset its EQ on reboot.
+- EQ preset tabs write immediately; curve edits auto-save after a short debounce; editing a preset keeps that preset selected (no "modified" badge), and Reset restores the current preset's factory curve. The last selected preset, each preset's edited curve, and the sound-normalization level/switch persist in `%APPDATA%\SAIL\ESPNANYS-REZAR\eq-presets.json`; on the next start they are written back after the model's output is active. That JSON file is the source of truth: the WebView `localStorage` copy is only a cache, because a stale WebView profile used to send a level-1 preference back to THX on every launch. Game/music/movie defaults are per model and follow Razer Synapse's observed tables; the custom default is the same deliberate `[1, -5, -3, 0, 1, 1, 1, 1, 1, -3]` on both models. The default curve is also written once on startup and after a reconnect when no EQ configuration exists, because the headset can reset its EQ on reboot.
 - A reversible **disable Razer Synapse 4 / driver auto-updates** switch.
 - No Razer or THX binaries are bundled or redistributed.
 
@@ -244,7 +244,7 @@ scripts\run-ui.cmd
 绿色包不需要安装、不需要管理员权限、不写 Program Files：
 
 ```text
-ESPNANYS-REZAR-v0.1.0-win-x64-green5\
+ESPNANYS-REZAR-v0.1.0-win-x64-green6\
 ├─ sail_ui.exe
 ├─ sail_thx.exe
 ├─ sail_cli.exe
@@ -521,7 +521,7 @@ THX 是挂在耳机音频 endpoint 上的 **Windows APO**（版本 3.2.3.0），
 |---|---|
 | 扬声器均衡器预设/频段 | **HID `0x93` + `0x95`**，同时写 THX `SetRenderEQGains` |
 | 麦克风均衡器预设/频段 | **只走 THX `SetCaptureEQGains`**；写入 JSON 10 值，`SetCaptureEQ(true)` 才会生效；HID `0x96` 返回 status 5 |
-| 声音标准化 | 只走 THX `SetRenderNormalization` / `Level`（DRC）；默认等级 **5**，用户改过后保存到 `localStorage`，重启自动恢复 |
+| 声音标准化 | 只走 THX `SetRenderNormalization` / `Level`（DRC）；默认等级 **5**，用户改过后写入 `%APPDATA%\SAIL\ESPNANYS-REZAR\eq-presets.json`（`normalizationLevel` / `normalizationEnabled`），下次进入设备时自动恢复；WebView `localStorage` 只作缓存 |
 | 噪声门 | THX `SetCaptureVoiceGate` / `SetCaptureVoiceGateLevel(float)`；UI 1–5 → -60…-20 dB |
 | 麦克风降噪 | THX `SetCaptureNoiseReduction` / `Level`；0–100 1:1 |
 | 音量标准化 / 亮丽人声 | THX `SetCaptureNormalization` / `SetCaptureVocalClarity` + `Level` |
